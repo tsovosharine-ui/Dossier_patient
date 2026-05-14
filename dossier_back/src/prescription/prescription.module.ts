@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PrescriptionController } from './prescription.controller';
+import { PrescriptionService } from './prescription.service';
+import { Prescription } from './entities/prescription.entity';
+import { HistoriqueModule } from '../historique/historique.module';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Prescription]), HistoriqueModule],
+  controllers: [PrescriptionController],
+  providers: [PrescriptionService],
+  exports: [PrescriptionService],
+})
+export class PrescriptionModule {}

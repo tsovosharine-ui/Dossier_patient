@@ -1,0 +1,150 @@
+import api from './api';
+
+// Création d'une prescription (type peut être 'medicament', 'non_medicament', etc.)
+export async function creerPrescriptionMedicale(data: any) {
+  const { patientId, medicaments, remarques, notifierInfirmier, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'medicament',
+    contenu: JSON.stringify({ medicaments, remarques, notifierInfirmier }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionNonMedicale(data: any) {
+  const { patientId, items, notifierInfirmier, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'non_medicament',
+    contenu: JSON.stringify({ items, notifierInfirmier }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionSurveillance(data: any) {
+  const { patientId, parametres, notes, notifierInfirmier, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'surveillance',
+    contenu: JSON.stringify({ parametres, notes, notifierInfirmier }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionTransfusion(data: any) {
+  const { patientId, renseignements, groupage, hb, produit, quantite, datePrevue, notes, urgence, alertes, atcdTransfusion, incident, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'transfusion',
+    contenu: JSON.stringify({ renseignements, groupage, hb, produit, quantite, datePrevue, notes, urgence, alertes, atcdTransfusion, incident }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionBloc(data: any) {
+  const { patientId, libelle, renseignements, urgence, alertes, risqueHemorragique, chirurgien, consignes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'bloc',
+    contenu: JSON.stringify({ libelle, renseignements, urgence, alertes, risqueHemorragique, chirurgien, consignes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionLabo(data: any) {
+  const { patientId, analyses, renseignements, urgence, alertes, notes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ analyses, renseignements, urgence, alertes, notes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionImagerie(data: any) {
+  const { patientId, examens, renseignements, urgence, alertes, notes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ examens, renseignements, urgence, alertes, notes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionAnapath(data: any) {
+  const { patientId, typeExamen, data: anapathData, urgence, alertes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ typeExamen, anapathData, urgence, alertes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionEEG(data: any) {
+  const { patientId, renseignements, typeEEG, remarques, urgence, alertes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ renseignements, typeEEG, remarques, urgence, alertes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionKine(data: any) {
+  const { patientId, renseignements, typeKine, diagnostic, contreIndications, objectifs, remarques, urgence, alertes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'non_medicament',
+    contenu: JSON.stringify({ renseignements, typeKine, diagnostic, contreIndications, objectifs, remarques, urgence, alertes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionDialyse(data: any) {
+  const { patientId, renseignements, typeDialyse, remarques, urgence, alertes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ renseignements, typeDialyse, remarques, urgence, alertes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+export async function creerPrescriptionEndoscopie(data: any) {
+  const { patientId, renseignements, typeExamen, remarques, urgence, alertes, prescripteurId } = data;
+  const response = await api.post(`/patients/${patientId}/prescriptions`, {
+    type: 'paraclinique',
+    contenu: JSON.stringify({ renseignements, typeExamen, remarques, urgence, alertes }),
+    prescripteur: prescripteurId,
+    valide: true,
+  });
+  return response.data;
+}
+
+// Récupération des prescriptions actives (pour l'affichage "en cours")
+
+// Récupération de toutes les prescriptions (pour l'historique)
+export async function getPrescriptionsPatient(patientId: string) {
+  const response = await api.get(`/patients/${patientId}/prescriptions`);
+  return response.data;
+}
+
+// Terminer une prescription
+export async function terminerPrescription(id: string, patientId: string) {
+  const response = await api.patch(`/patients/${patientId}/prescriptions/${id}/terminer`);
+  return response.data;
+}
+
+

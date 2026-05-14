@@ -1,0 +1,41 @@
+import { ResultatParacliniqueModule } from "./resultat-paraclinique/resultat-paraclinique.module";
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PatientModule } from './patient/patient.module';
+import { ObservationModule } from './observation/observation.module';
+import { DiagnosticModule } from './diagnostic/diagnostic.module';
+import { SortieModule } from './sortie/sortie.module';
+import { CrOperatoireModule } from './cr-operatoire/cr-operatoire.module';
+import { SuiviModule } from './suivi/suivi.module';
+
+@Module({
+  imports: [
+    ResultatParacliniqueModule,
+    ResultatParacliniqueModule,
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+    ResultatParacliniqueModule,
+    ResultatParacliniqueModule,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get<string>('DB_HOST'),
+        port: config.get<number>('DB_PORT') ?? 5432,
+        username: config.get<string>('DB_USERNAME'),
+        password: config.get<string>('DB_PASSWORD'),
+        database: config.get<string>('DB_DATABASE'),
+        autoLoadEntities: true,
+        synchronize: true,
+      }),
+    }),
+    PatientModule,
+    ObservationModule,
+    DiagnosticModule,
+    SuiviModule,
+    CrOperatoireModule,
+    SortieModule,
+  ],
+})
+export class AppModule {}

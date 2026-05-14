@@ -1,0 +1,120 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { useParams } from 'next/navigation';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { fetchPatient } from '@/lib/api';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { PatientHeader } from '@/components/DossierPatient/PatientHeader';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { ObservationForm } from '@/components/DossierPatient/ObservationForm';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { PrescriptionsTab } from '@/components/DossierPatient/PrescriptionsTab';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { SortieTab } from '@/components/DossierPatient/SortieTab';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { CrOperatoireTab } from '@/components/DossierPatient/CrOperatoireTab';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { SuiviTab } from '@/components/DossierPatient/SuiviTab';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+import { DiagnosticTab } from '@/components/DossierPatient/DiagnosticTab';
+import ResultatsParacliniquesTab from "@/components/DossierPatient/ResultatsParacliniquesTab";
+
+const TABS = [
+  { key: 'observation', label: 'Observation médical' },
+  { key: 'diagnostic', label: 'Diagnostic' },
+  { key: 'prescription', label: 'Prescription' },
+  { key: 'suivi', label: 'Suivi / Évolution' },
+  { key: 'cr_operatoire', label: 'Compte-rendu opératoire' },
+  { key: 'resultats', label: 'Résultats paracliniques' },
+  { key: 'sortie', label: 'Sortie' },
+  { key: 'historique', label: 'Historique' },
+];
+
+export default function DossierPatientPage() {
+  const { id } = useParams<{ id: string }>();
+  const [patient, setPatient] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('observation');
+
+  useEffect(() => {
+    if (id) {
+      fetchPatient(id as string)
+        .then(res => setPatient(res.data))
+        .catch(console.error);
+    }
+  }, [id]);
+
+  if (!patient) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#94a3b8', fontSize: '14px' }}>
+      Chargement du dossier...
+    </div>
+  );
+
+  const age = patient.dateNaissance
+    ? new Date().getFullYear() - new Date(patient.dateNaissance).getFullYear()
+    : 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <PatientHeader
+        nom={patient.nom}
+        prenom={patient.prenom}
+        id={patient.id}
+        groupeSanguin={patient.groupeSanguin || 'O+'}
+        age={age}
+        sexe={patient.sexe || 'M'}
+        chambre="Bloc A"
+        lit="Lit 12"
+        allergies={patient.allergies || 'Pénicilline'}
+        categorie={patient.categorie || 'BANQUE'}
+      />
+
+      <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+        {/* Barre onglets */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', backgroundColor: '#ffffff' }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '14px 18px', fontSize: '13px',
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                color: activeTab === tab.key ? '#1d4ed8' : '#64748b',
+                backgroundColor: '#ffffff', border: 'none',
+                borderBottom: activeTab === tab.key ? '2px solid #1d4ed8' : '2px solid transparent',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                fontFamily: "'Inter', sans-serif",
+                transition: 'all 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Contenu */}
+        <div style={{ padding: '24px', backgroundColor: '#ffffff' }}>
+          {activeTab === 'observation' && <ObservationForm patientId={patient.id} />}
+          {activeTab === 'diagnostic' && <DiagnosticTab patientId={patient.id} medecinNom="Dr. Jean Pierre" />}
+          {activeTab === 'prescription' && <PrescriptionsTab patientId={patient.id} />}
+          {activeTab === 'suivi' && <SuiviTab patientId={patient.id} />}
+          {activeTab === 'cr_operatoire' && <CrOperatoireTab patientId={patient.id} />}
+          {activeTab === 'resultats' && <ResultatsParacliniquesTab patientId={patient.id} />}
+          {activeTab === 'sortie' && <SortieTab patientId={patient.id} />}
+          {activeTab === 'historique' && <ComingSoon label="Historique" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ label }: { label: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: '#94a3b8' }}>
+      <div style={{ fontSize: '40px', marginBottom: '12px' }}>🚧</div>
+      <p style={{ fontSize: '15px', fontWeight: 500, margin: 0 }}>{label}</p>
+      <p style={{ fontSize: '13px', marginTop: '4px' }}>En cours de développement</p>
+    </div>
+  );
+}
