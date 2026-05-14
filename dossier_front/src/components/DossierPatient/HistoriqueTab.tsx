@@ -52,7 +52,7 @@ const FIELD_LABELS: Record<string, string> = {
   examenClinique: 'Examen clinique', evolution: 'Évolution',
   nomIntervention: 'Intervention', chirurgienPrincipal: 'Chirurgien',
   anesthesiste: 'Anesthésiste', typeAnesthesie: 'Anesthésie',
-  classeAsa: 'Classe ASA', duree: 'Durée', scoreSccre: 'Score SCCRE',
+  classeAsa: 'Classe ASA', scoreSccre: 'Score SCCRE',
   complications: 'Complications', typeSortie: 'Type de sortie',
   dateSortieprevue: 'Date de sortie', medecinValidant: 'Médecin validant',
   compteRenduSortie: 'Compte-rendu', suiviPostSortie: 'Suivi post-sortie',
