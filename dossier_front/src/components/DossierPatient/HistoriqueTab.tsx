@@ -105,7 +105,7 @@ function ValeurSection({ title, data, color, bg, border }: {
             try { parsedVal = JSON.parse(val); } catch { parsedVal = val; }
           }
 
-          if (key === 'contenu' && parsedVal && typeof parsedVal === 'object' && Array.isArray(parsedVal.medicaments)) {
+          if (key === 'contenu' && parsedVal && typeof parsedVal === 'object' && Array.isArray((parsedVal as any).medicaments)) {
             const v = parsedVal;
             return (
               <div key={key}>
