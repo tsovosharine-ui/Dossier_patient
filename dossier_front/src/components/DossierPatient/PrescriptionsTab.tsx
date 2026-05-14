@@ -15,7 +15,7 @@ import DiaryseForm from '@/components/prescription/para/DiaryseForm';
 import EndoscopieForm from '@/components/prescription/para/EndoscopieForm';
 import HistoriquePrescriptions from '@/components/prescription/HistoriquePrescriptions';
 
-type Section = 'med' | 'nm' | 'surv' | 'trans' | 'bloc' | 'labo' | 'imag' | 'ana' | 'eeg' | 'kine' | 'dial' | 'endo' | 'histo';
+type Section = 'med' | 'nm' | 'surv' | 'trans' | 'bloc' | 'labo' | 'imag' | 'ana' | 'eeg' | 'kine' | 'dial' | 'endo' | 'histo' | 'para';
 
 const mainItems = [
   { id: 'med',   icon: 'medication',       label: 'Médicamenteuse' },

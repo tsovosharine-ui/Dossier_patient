@@ -111,7 +111,7 @@ function ValeurSection({ title, data, color, bg, border }: {
               <div key={key}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Médicaments</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                  {v.medicaments.map((med: any, i: number) => (
+                  {(v as any).medicaments.map((med: any, i: number) => (
                     <div key={i} style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px', borderLeft: '3px solid #1d4ed8' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>{med.nom || '—'}</div>
                       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -124,8 +124,8 @@ function ValeurSection({ title, data, color, bg, border }: {
                     </div>
                   ))}
                 </div>
-                {v.remarques && v.remarques !== '' && (
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#64748b' }}>Remarques : {v.remarques}</div>
+                {(v as any).remarques && (v as any).remarques !== '' && (
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#64748b' }}>Remarques : {(v as any).remarques}</div>
                 )}
               </div>
             );
