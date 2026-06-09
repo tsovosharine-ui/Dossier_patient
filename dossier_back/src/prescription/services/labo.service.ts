@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PrescriptionLabo } from '../entities/prescription-labo.entity';
 import { ExternalIntegrationService, IntegrationConfig } from '../../integration/external-integration.service';
+import { NotificationService } from './notification.service';
 
 @Injectable()
 export class LaboService {
@@ -10,6 +11,7 @@ export class LaboService {
     @InjectRepository(PrescriptionLabo)
     private repo: Repository<PrescriptionLabo>,
     private integrationService: ExternalIntegrationService,
+    private notificationService: NotificationService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
@@ -28,6 +30,15 @@ export class LaboService {
         analyses: dto.analyses,
       });
     }
+
+    // Create notification
+    await this.notificationService.create({
+      type: 'PRESCRIPTION_LABO',
+      message: `Nouvelle prescription laboratoire pour le patient ${savedPrescription.patientId}`,
+      patientId: savedPrescription.patientId,
+      prescriptionId: savedPrescription.id,
+      statut: 'PENDING',
+    });
 
     return savedPrescription;
   }

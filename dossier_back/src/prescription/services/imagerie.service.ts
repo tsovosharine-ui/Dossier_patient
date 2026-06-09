@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PrescriptionImagerie } from '../entities/prescription-imagerie.entity';
 import { ExternalIntegrationService, IntegrationConfig } from '../../integration/external-integration.service';
+import { NotificationService } from './notification.service';
 
 @Injectable()
 export class ImagerieService {
@@ -10,6 +11,7 @@ export class ImagerieService {
     @InjectRepository(PrescriptionImagerie)
     private repo: Repository<PrescriptionImagerie>,
     private integrationService: ExternalIntegrationService,
+    private notificationService: NotificationService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
@@ -28,6 +30,15 @@ export class ImagerieService {
         examens: dto.examens,
       });
     }
+
+    // Create notification
+    await this.notificationService.create({
+      type: 'PRESCRIPTION_IMAGERIE',
+      message: `Nouvelle prescription imagerie pour le patient ${savedPrescription.patientId}`,
+      patientId: savedPrescription.patientId,
+      prescriptionId: savedPrescription.id,
+      statut: 'PENDING',
+    });
 
     return savedPrescription;
   }

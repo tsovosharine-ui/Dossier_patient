@@ -5,6 +5,7 @@ import { PrescriptionMedicale } from '../entities/prescription-medicale.entity';
 import { Medicament } from '../entities/medicament.entity';
 import { Ordonnance } from '../entities/ordonnance.entity';
 import { ExternalIntegrationService, IntegrationConfig } from '../../integration/external-integration.service';
+import { NotificationService } from './notification.service';
 
 @Injectable()
 export class MedicaleService {
@@ -16,6 +17,7 @@ export class MedicaleService {
     @InjectRepository(Ordonnance)
     private ordonnanceRepo: Repository<Ordonnance>,
     private integrationService: ExternalIntegrationService,
+    private notificationService: NotificationService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
@@ -58,6 +60,15 @@ export class MedicaleService {
         medicaments,
       });
     }
+
+    // Create notification
+    await this.notificationService.create({
+      type: 'PRESCRIPTION_MEDICALE',
+      message: `Nouvelle prescription médicale pour le patient ${savedPrescription.patientId}`,
+      patientId: savedPrescription.patientId,
+      prescriptionId: savedPrescription.id,
+      statut: 'PENDING',
+    });
 
     return this.findOne(savedPrescription.id);
   }

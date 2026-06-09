@@ -123,39 +123,20 @@ export default function HistoriqueForm({ patient }: Props) {
         const patientId = patient?.id;
         if (!patientId) { setError('ID patient manquant'); setLoading(false); return; }
 
-        const response = await api.get(`/patients/${patientId}/prescriptions`);
-        const allPrescriptions = Array.isArray(response.data) ? response.data : [];
+        const typesToFetch = filtre === 'all' ? Object.keys(ENDPOINTS) : [filtre];
+        const results: PrescriptionItem[] = [];
 
-        // Filtrer par type si nécessaire
-        const filtered = filtre === 'all' 
-          ? allPrescriptions 
-          : allPrescriptions.filter((p: any) => {
-              const typeMap: Record<string, string> = {
-                'medicament': 'med',
-                'non_medicament': 'nm',
-                'surveillance': 'surv',
-                'transfusion': 'trans',
-                'paraclinique': 'labo',
-                'bloc': 'bloc',
-              };
-              const normalizedType = typeMap[p.type] || p.type;
-              return normalizedType === filtre;
-            });
-
-        // Parser le contenu JSON et ajouter le type
-        const results = filtered.map((p: any) => {
-          let contenu: any = {};
-          try { contenu = JSON.parse(p.contenu || '{}'); } catch {}
-          return {
-            ...p,
-            ...contenu,
-            _type: p.type,
-            createdAt: p.createdAt,
-          };
-        });
+        await Promise.all(typesToFetch.map(async (type) => {
+          try {
+            const url = `${API_URL}/${ENDPOINTS[type]}/patient/${patientId}`;
+            const res = await api.get(url);
+            const list = Array.isArray(res.data) ? res.data : [];
+            list.forEach((item: Partial<PrescriptionItem>) => results.push({ ...item, _type: type } as PrescriptionItem));
+          } catch { /* ignore les endpoints qui échouent */ }
+        }));
 
         // Trier par date décroissante
-        results.sort((a: any, b: any) => {
+        results.sort((a, b) => {
           const da = new Date(a.createdAt || a.date || 0).getTime();
           const db = new Date(b.createdAt || b.date || 0).getTime();
           return db - da;
