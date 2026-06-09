@@ -17,7 +17,7 @@ export class PrescriptionLabo {
   @Column({ nullable: true })
   alertes: string;
 
-  @Column()
+  @Column({ nullable: true })
   renseignements: string;
 
   @Column({ type: 'text', array: true })

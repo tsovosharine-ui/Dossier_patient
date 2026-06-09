@@ -6,6 +6,7 @@ import { Medicament } from '../entities/medicament.entity';
 import { Ordonnance } from '../entities/ordonnance.entity';
 import { ExternalIntegrationService, IntegrationConfig } from '../../integration/external-integration.service';
 import { NotificationService } from './notification.service';
+import { PlanningService } from './planning.service';
 
 @Injectable()
 export class MedicaleService {
@@ -18,6 +19,7 @@ export class MedicaleService {
     private ordonnanceRepo: Repository<Ordonnance>,
     private integrationService: ExternalIntegrationService,
     private notificationService: NotificationService,
+    private planningService: PlanningService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
@@ -34,7 +36,7 @@ export class MedicaleService {
       medicaments.map((m: any) => {
         const intervalleMinutes =
           m.frequenceType && m.frequenceValeur
-            ? this.calculerIntervalleMinutes(m.frequenceType, m.frequenceValeur)
+            ? this.planningService.calculerIntervalleMinutes(m.frequenceType, m.frequenceValeur)
             : undefined;
 
         return this.medicamentRepo.save({
@@ -44,6 +46,7 @@ export class MedicaleService {
           quantite: m.quantite || 1,
           intervalleMinutes,
           dateDebutEffective: m.dateDebut ? new Date(m.dateDebut) : new Date(),
+          planningActif: true,
         });
       }),
     );
@@ -64,13 +67,28 @@ export class MedicaleService {
     // Create notification
     await this.notificationService.create({
       type: 'PRESCRIPTION_MEDICALE',
-      message: `Nouvelle prescription médicale pour le patient ${savedPrescription.patientId}`,
+      titre: `Nouvelle prescription médicale`,
+      destinataire: 'INFIRMIER',
+      expediteurId: prescripteurId,
       patientId: savedPrescription.patientId,
-      prescriptionId: savedPrescription.id,
-      statut: 'PENDING',
+      referenceId: savedPrescription.id,
+      referenceType: 'PRESCRIPTION_MEDICALE',
+      contenu: {
+        medicaments,
+        remarques: savedPrescription.remarques,
+      },
+      statut: 'EN_ATTENTE',
     });
 
-    return this.findOne(savedPrescription.id);
+    // Generate planning for each medication
+    const prescriptionWithMedicaments = await this.findOne(savedPrescription.id);
+    for (const medicament of prescriptionWithMedicaments.medicaments) {
+      if (medicament.intervalleMinutes && medicament.planningActif) {
+        await this.planningService.genererPlanningMedicament(medicament.id);
+      }
+    }
+
+    return prescriptionWithMedicaments;
   }
 
   async findAll() {
@@ -102,21 +120,39 @@ export class MedicaleService {
       prescriptionId,
       medicaments,
     });
-    return this.ordonnanceRepo.save(ordonnance);
+    const savedOrdonnance = await this.ordonnanceRepo.save(ordonnance);
+
+    // Send to external pharmacy API if configured
+    if (process.env.PHARMACY_API_URL) {
+      const config: IntegrationConfig = {
+        apiUrl: process.env.PHARMACY_API_URL,
+        endpoint: '/ordonnances',
+      };
+      try {
+        await this.integrationService.sendToExternalApi(config, {
+          prescriptionId,
+          ordonnanceId: savedOrdonnance.id,
+          medicaments,
+        });
+        
+        // Update sync status
+        await this.prescriptionRepo.update(prescriptionId, {
+          statutSync: 'SUCCES',
+          syncedAt: new Date(),
+        });
+      } catch (error) {
+        await this.prescriptionRepo.update(prescriptionId, {
+          statutSync: 'ECHEC',
+          syncError: String(error),
+          syncedAt: new Date(),
+        });
+      }
+    }
+
+    return savedOrdonnance;
   }
 
   async updateStatut(id: string, statut: string) {
     return this.prescriptionRepo.update(id, { statut });
-  }
-
-  private calculerIntervalleMinutes(frequenceType: string, frequenceValeur: number): number | undefined {
-    switch (frequenceType) {
-      case 'HEURES':
-        return frequenceValeur * 60;
-      case 'PAR_JOUR':
-        return (24 * 60) / frequenceValeur;
-      default:
-        return undefined;
-    }
   }
 }

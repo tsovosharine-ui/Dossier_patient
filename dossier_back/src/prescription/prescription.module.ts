@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpModule } from '@nestjs/axios';
 import { PrescriptionController } from './prescription.controller';
 import { PrescriptionService } from './prescription.service';
 import { Prescription } from './entities/prescription.entity';
@@ -73,6 +74,7 @@ import { Notification } from './entities/notification.entity';
       PriseMedicament,
       Notification,
     ]),
+    HttpModule,
     HistoriqueModule,
     IntegrationModule,
   ],

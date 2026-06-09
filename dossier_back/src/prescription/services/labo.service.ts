@@ -34,10 +34,17 @@ export class LaboService {
     // Create notification
     await this.notificationService.create({
       type: 'PRESCRIPTION_LABO',
-      message: `Nouvelle prescription laboratoire pour le patient ${savedPrescription.patientId}`,
+      titre: `Nouvelle prescription laboratoire`,
+      destinataire: 'LABORATOIRE',
+      expediteurId: prescripteurId,
       patientId: savedPrescription.patientId,
-      prescriptionId: savedPrescription.id,
-      statut: 'PENDING',
+      referenceId: savedPrescription.id,
+      referenceType: 'PRESCRIPTION_LABO',
+      contenu: {
+        analyses: dto.analyses,
+        urgence: dto.urgence,
+      },
+      statut: 'EN_ATTENTE',
     });
 
     return savedPrescription;

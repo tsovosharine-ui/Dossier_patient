@@ -9,6 +9,11 @@ import { Notification } from '../entities/notification.entity';
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
+  private readonly targetWebhooks: Record<string, string> = {
+    dialyse: 'https://chu-dialyse.onrender.com/notifications/receive',
+    endoscopie: 'https://endoscopie-api.onrender.com/api/notifications/receive',
+  };
+
   constructor(
     @InjectRepository(Notification)
     private notificationRepo: Repository<Notification>,
@@ -17,11 +22,17 @@ export class NotificationService {
 
   async create(dto: any) {
     const notification = this.notificationRepo.create(dto);
-    const saved = await this.notificationRepo.save(notification);
+    const saved = await this.notificationRepo.save(notification) as unknown as Notification;
 
     // Send notification via Render if configured
     if (process.env.RENDER_WEBHOOK_URL) {
       await this.sendToRender(saved);
+    }
+
+    // Send to direct webhooks for specific services
+    const serviceType = dto.type?.replace('PRESCRIPTION_', '').toLowerCase();
+    if (this.targetWebhooks[serviceType]) {
+      await this.sendToDirectWebhook(saved, this.targetWebhooks[serviceType]);
     }
 
     return saved;
@@ -36,9 +47,11 @@ export class NotificationService {
         this.httpService.post(webhookUrl, {
           id: notification.id,
           type: notification.type,
-          message: notification.message,
+          titre: notification.titre,
+          contenu: notification.contenu,
           patientId: notification.patientId,
-          prescriptionId: notification.prescriptionId,
+          referenceId: notification.referenceId,
+          referenceType: notification.referenceType,
           createdAt: notification.createdAt,
         }),
       );
@@ -47,6 +60,30 @@ export class NotificationService {
       this.logger.log(`Notification ${notification.id} envoyée à Render`);
     } catch (error) {
       this.logger.error(`Erreur envoi notification à Render: ${error}`);
+    }
+  }
+
+  async sendToDirectWebhook(notification: Notification, webhookUrl: string) {
+    try {
+      await firstValueFrom(
+        this.httpService.post(webhookUrl, {
+          id: notification.id,
+          type: notification.type,
+          titre: notification.titre,
+          contenu: notification.contenu,
+          patientId: notification.patientId,
+          referenceId: notification.referenceId,
+          referenceType: notification.referenceType,
+          destinataire: notification.destinataire,
+          expediteurId: notification.expediteurId,
+          statut: notification.statut,
+          createdAt: notification.createdAt,
+        }),
+      );
+
+      this.logger.log(`Notification ${notification.id} envoyée à webhook direct ${webhookUrl}`);
+    } catch (error) {
+      this.logger.error(`Erreur envoi notification à webhook direct: ${error}`);
     }
   }
 

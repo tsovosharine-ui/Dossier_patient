@@ -34,10 +34,17 @@ export class ImagerieService {
     // Create notification
     await this.notificationService.create({
       type: 'PRESCRIPTION_IMAGERIE',
-      message: `Nouvelle prescription imagerie pour le patient ${savedPrescription.patientId}`,
+      titre: `Nouvelle prescription imagerie`,
+      destinataire: 'IMAGERIE',
+      expediteurId: prescripteurId,
       patientId: savedPrescription.patientId,
-      prescriptionId: savedPrescription.id,
-      statut: 'PENDING',
+      referenceId: savedPrescription.id,
+      referenceType: 'PRESCRIPTION_IMAGERIE',
+      contenu: {
+        examens: dto.examens,
+        urgence: dto.urgence,
+      },
+      statut: 'EN_ATTENTE',
     });
 
     return savedPrescription;
