@@ -123,7 +123,7 @@ export function PrescriptionsTab({ patientId, patient, prescripteur }: Props) {
         {currentSection === 'kine'  && <KineForm         patient={patientData} prescripteur={prescripteurData} />}
         {currentSection === 'dial'  && <DiaryseForm      patient={patientData} prescripteur={prescripteurData} />}
         {currentSection === 'endo'  && <EndoscopieForm   patient={patientData} prescripteur={prescripteurData} />}
-        {currentSection === 'histo' && <HistoriquePrescriptions patientId={patientId} />}
+        {currentSection === 'histo' && <HistoriquePrescriptions patient={patientData} />}
       </div>
     </div>
   );

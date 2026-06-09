@@ -7,7 +7,21 @@ type Urgence = "n" | "u" | "tu";
 const urgenceClasses: Record<Urgence, string> = { n: "un", u: "uu", tu: "utu" };
 const DIALYSE_TYPES = ["HD conventionnelle","HDF on-line","Hémofiltration","DPCA","DPA automatisée"];
 
-interface Props { patient: { id: string; nom?: string; prenom?: string }; prescripteur: { id?: string; nom?: string; prenom?: string; service?: string; poste?: string }; }
+interface Props { patient: { 
+    id: string; 
+    nom?: string; 
+    prenom?: string;
+    sexe?: string;
+    dateNaissance?: string;
+    allergies?: string[];
+    groupeSanguin?: string;
+  }; prescripteur: { id?: string; nom?: string; prenom?: string; service?: string }; }
+
+function calcAge(dateNaissance?: string): number | null {
+  if (!dateNaissance) return null;
+  const diff = Date.now() - new Date(dateNaissance).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
 
 export default function DiaryseForm({ patient, prescripteur }: Props) {
   const [urgence, setUrgence] = useState<Urgence>("n"); const [alertes, setAlertes] = useState("");
@@ -15,6 +29,12 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
   const [remarques, setRemarques] = useState(""); const [showModal, setShowModal] = useState(false);
   const [toast, setToast] = useState(""); const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validatedPrescription, setValidatedPrescription] = useState<any>(null);
+
+  const age = calcAge(patient?.dateNaissance);
+  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
+
   const isFormValid = !!renseignements.trim() && !!dialType;
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2800); }
 
@@ -32,8 +52,18 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
   async function handleSubmit() {
     setShowModal(false); setLoading(true); setApiError("");
     try {
-      await creerPrescriptionDialyse({ patientId: patient.id, urgence, alertes, renseignements, typeDialyse: dialType, remarques });
-      openSummaryWindow('Dialyse', buildDialyseSummary());
+      await creerPrescriptionDialyse({ patientId: patient.id, prescripteurId: prescripteur.id, urgence, alertes, renseignements, typeDialyse: dialType, remarques });
+      setValidatedPrescription({
+        urgence,
+        alertes,
+        renseignements,
+        dialType,
+        remarques,
+        patient: { ...patient, age },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+      });
+      setShowValidationModal(true);
       showToast("Prescription dialyse transmise"); setUrgence("n"); setAlertes(""); setRenseign(""); setDialType(""); setRemarques("");
     } catch { setApiError("Erreur lors de l'envoi."); }
     finally { setLoading(false); }
@@ -54,6 +84,102 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
         </div>
       </div>
       {showModal && <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}><div className="mbox"><h3>Confirmer ?</h3><p>La prescription sera transmise au service de dialyse.</p><div className="mbtns"><button className="bca" onClick={()=>setShowModal(false)}>Annuler</button><button className="bok" onClick={handleSubmit}>Confirmer</button></div></div></div>}
+
+      {showValidationModal && validatedPrescription && (
+        <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowValidationModal(false); }}>
+          <div className="mbox" style={{ maxWidth: 600, width: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--navy)', color: '#fff', padding: '16px 20px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ms" style={{ fontSize: 24 }}>check_circle</span>
+              <div>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 800, margin: 0 }}>Prescription dialyse validée</h3>
+                <p style={{ fontSize: 12, opacity: 0.9, margin: '4px 0 0 0' }}>{validatedPrescription.date}</p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Patient Info */}
+              <div style={{ background: 'var(--navy-lt)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="ms" style={{ fontSize: 22, color: '#fff' }}>person</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Patient</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{validatedPrescription.patient.prenom} {validatedPrescription.patient.nom}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
+                  {validatedPrescription.patient.sexe && <span><strong>Sexe:</strong> {validatedPrescription.patient.sexe === 'M' ? 'Masculin' : validatedPrescription.patient.sexe === 'F' ? 'Féminin' : validatedPrescription.patient.sexe}</span>}
+                  {validatedPrescription.patient.age && <span><strong>Âge:</strong> {validatedPrescription.patient.age} ans</span>}
+                  {validatedPrescription.patient.groupeSanguin && <span><strong>Groupe sanguin:</strong> {validatedPrescription.patient.groupeSanguin}</span>}
+                </div>
+                {validatedPrescription.patient.allergies && validatedPrescription.patient.allergies.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ms" style={{ fontSize: 14 }}>warning</span>
+                    <strong>Allergies:</strong> {validatedPrescription.patient.allergies.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescriber Info */}
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--txt2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ fontSize: 22, color: '#fff' }}>medical_services</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Prescripteur</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Dr {validatedPrescription.prescripteur.prenom} {validatedPrescription.prescripteur.nom}</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.prescripteur.service || 'Service non spécifié'}</div>
+                </div>
+              </div>
+
+              {/* Dialyse Details */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 12 }}>Détails de la dialyse</div>
+                <div style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>Renseignements cliniques</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.renseignements}</div>
+                </div>
+                <div style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--navy-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="ms" style={{ fontSize: 18, color: 'var(--navy)' }}>water_drop</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>Type de dialyse</div>
+                    <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.dialType}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Urgence */}
+              <div style={{ background: validatedPrescription.urgence === 'n' ? '#dcfce7' : validatedPrescription.urgence === 'u' ? '#fef3c7' : '#fee2e2', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b', marginBottom: 4 }}>Degré d'urgence</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b' }}>{validatedPrescription.urgence === 'n' ? 'Normal' : validatedPrescription.urgence === 'u' ? 'Urgent' : 'STAT'}</div>
+              </div>
+
+              {/* Alertes */}
+              {validatedPrescription.alertes && (
+                <div style={{ background: 'var(--red-lt)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--red)', marginBottom: 4 }}>Alertes</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.alertes}</div>
+                </div>
+              )}
+
+              {/* Remarques */}
+              {validatedPrescription.remarques && (
+                <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 4 }}>Remarques</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.remarques}</div>
+                </div>
+              )}
+
+              <div className="mbtns" style={{ marginTop: 20 }}>
+                <button className="bok" onClick={() => setShowValidationModal(false)}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className="tst on"><span className="ms">check_circle</span>{toast}</div>}
     </div>
   );

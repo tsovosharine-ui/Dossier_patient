@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { openSummaryWindow } from '@/lib/printPrescription';
 import { creerPrescriptionAnapath } from "@/lib/prescriptionApi";
 
 type Urgence = "n" | "u" | "tu";
@@ -26,8 +25,37 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 });
 
 interface Props {
-  patient: { id: string; nom?: string; prenom?: string };
-  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string; poste?: string };
+  patient: { 
+    id: string; 
+    nom?: string; 
+    prenom?: string;
+    sexe?: string;
+    dateNaissance?: string;
+    allergies?: string[];
+    groupeSanguin?: string;
+  };
+  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string };
+}
+
+function calcAge(dateNaissance?: string): number | null {
+  if (!dateNaissance) return null;
+  const diff = Date.now() - new Date(dateNaissance).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+interface ValidatedPrescription {
+  urgence: Urgence;
+  alertes: string;
+  renseign: string;
+  tab: AnaTab;
+  fcvService?: string; fcvGPA?: string; fcvDDR?: string; fcvMeno?: string; fcvMenarche?: string; fcvRapport?: string; fcvContra?: string; fcvTtt?: string; fcvPapLieu?: string; fcvPapNb?: string; fcvPapDate?: string; fcvPapRes?: string; fcvAtcd?: string; fcvMeth?: string; fcvNote?: string;
+  cytoService?: string; cytoSiege?: string; cytoOrgane?: string; cytoFix?: string; cytoFixAutre?: string; cytoNotes?: string;
+  liqService?: string; liqUnite?: string; liqNat?: string; liqNatAutre?: string; liqNotes?: string;
+  bioService?: string; bioExamAnt?: string; bioResAnt?: string; bioGPA?: string; bioDDR?: string; bioMeno?: string; bioAtcd?: string; bioDatePrelev?: string; bioFixateur?: string; bioOrgane?: string; bioNature?: string; bioNatureAutre?: string; bioSuspicion?: string; bioFaitA?: string; bioFaitLe?: string; bioNote?: string;
+  extService?: string; extChirurgien?: string; extPoste?: string; extIntervention?: string; extNature?: string; extOrgane?: string; extQuestion?: string; extHeure?: string; extNote?: string;
+  patient: Props["patient"] & { age: number | null; sexeLabel?: string };
+  prescripteur: Props["prescripteur"];
+  date: string;
 }
 
 export default function AnapathForm({ patient, prescripteur }: Props) {
@@ -39,6 +67,11 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
   const [toast, setToast]         = useState("");
   const [loading, setLoading]     = useState(false);
   const [apiError, setApiError]   = useState("");
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validatedPrescription, setValidatedPrescription] = useState<ValidatedPrescription | null>(null);
+
+  const age = calcAge(patient?.dateNaissance);
+  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
 
   // FCV
   const [fcvService, setFcvService]     = useState("");
@@ -132,100 +165,6 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2800); }
 
-  function buildAnapathSummary(): string {
-    const now = new Date().toLocaleString('fr-FR');
-    const label = TABS.find(t => t.key === tab)?.label || tab;
-    let html = `<div class="card"><div class="patient">Date : ${now}</div>`;
-    html += `<div class="medicament"><span class="nom">Type d'examen :</span> <span class="detail">${label}</span></div>`;
-    if (renseign) html += `<div class="medicament"><span class="nom">Renseignements :</span> <span class="detail">${renseign}</span></div>`;
-
-    if (tab === "fcv") {
-      if (fcvService) html += `<div class="medicament"><span class="nom">Service demandeur :</span> <span class="detail">${fcvService}</span></div>`;
-      html += `<div class="section"><span class="label">Antécédents</span></div>`;
-      if (fcvGPA) html += `<div class="medicament"><span class="nom">G P A :</span> <span class="detail">${fcvGPA}</span></div>`;
-      if (fcvDDR) html += `<div class="medicament"><span class="nom">DDR :</span> <span class="detail">${fcvDDR}</span></div>`;
-      if (fcvMeno) html += `<div class="medicament"><span class="nom">Ménopause :</span> <span class="detail">${fcvMeno}</span></div>`;
-      if (fcvMenarche) html += `<div class="medicament"><span class="nom">Âge ménarche :</span> <span class="detail">${fcvMenarche}</span></div>`;
-      if (fcvRapport) html += `<div class="medicament"><span class="nom">Âge 1er rapport :</span> <span class="detail">${fcvRapport}</span></div>`;
-      if (fcvContra) html += `<div class="medicament"><span class="nom">Contraception :</span> <span class="detail">${fcvContra}</span></div>`;
-      if (fcvTtt) html += `<div class="medicament"><span class="nom">Traitement en cours :</span> <span class="detail">${fcvTtt}</span></div>`;
-      if (fcvPapLieu || fcvPapNb || fcvPapDate || fcvPapRes) {
-        html += `<div class="section"><span class="label">Examens Pap antérieurs</span></div>`;
-        if (fcvPapLieu) html += `<div class="medicament"><span class="nom">Lieu :</span> <span class="detail">${fcvPapLieu}</span></div>`;
-        if (fcvPapNb) html += `<div class="medicament"><span class="nom">Nombre :</span> <span class="detail">${fcvPapNb}</span></div>`;
-        if (fcvPapDate) html += `<div class="medicament"><span class="nom">Date :</span> <span class="detail">${fcvPapDate}</span></div>`;
-        if (fcvPapRes) html += `<div class="medicament"><span class="nom">Résultat :</span> <span class="detail">${fcvPapRes}</span></div>`;
-      }
-      if (fcvAtcd) html += `<div class="medicament"><span class="nom">Autres ATCD :</span> <span class="detail">${fcvAtcd}</span></div>`;
-      if (fcvMeth) html += `<div class="medicament"><span class="nom">Méthode de prélèvement :</span> <span class="detail">${fcvMeth}</span></div>`;
-      if (fcvNote) html += `<div class="medicament"><span class="nom">Note complémentaire :</span> <span class="detail">${fcvNote}</span></div>`;
-    }
-
-    if (tab === "cyto") {
-      if (cytoService) html += `<div class="medicament"><span class="nom">Service demandeur :</span> <span class="detail">${cytoService}</span></div>`;
-      if (cytoSiege) html += `<div class="medicament"><span class="nom">Siège :</span> <span class="detail">${cytoSiege}</span></div>`;
-      if (cytoOrgane) html += `<div class="medicament"><span class="nom">Organe :</span> <span class="detail">${cytoOrgane}</span></div>`;
-      if (cytoFix) {
-        let fixDetail = cytoFix;
-        if (cytoFix === "Autre" && cytoFixAutre) fixDetail += ` (${cytoFixAutre})`;
-        html += `<div class="medicament"><span class="nom">Fixateur :</span> <span class="detail">${fixDetail}</span></div>`;
-      }
-      if (cytoNotes) html += `<div class="medicament"><span class="nom">Note :</span> <span class="detail">${cytoNotes}</span></div>`;
-    }
-
-    if (tab === "liq") {
-      if (liqService) html += `<div class="medicament"><span class="nom">Service demandeur :</span> <span class="detail">${liqService}</span></div>`;
-      if (liqUnite) html += `<div class="medicament"><span class="nom">Unité :</span> <span class="detail">${liqUnite}</span></div>`;
-      if (liqNat) {
-        let nat = liqNat;
-        if (liqNat === "Autre" && liqNatAutre) nat += ` (${liqNatAutre})`;
-        html += `<div class="medicament"><span class="nom">Nature :</span> <span class="detail">${nat}</span></div>`;
-      }
-      if (liqNotes) html += `<div class="medicament"><span class="nom">Note :</span> <span class="detail">${liqNotes}</span></div>`;
-    }
-
-    if (tab === "bio" || tab === "pos" || tab === "poc") {
-      if (bioService) html += `<div class="medicament"><span class="nom">Service demandeur :</span> <span class="detail">${bioService}</span></div>`;
-      html += `<div class="section"><span class="label">Antécédents</span></div>`;
-      if (bioExamAnt) html += `<div class="medicament"><span class="nom">Examen antérieur :</span> <span class="detail">${bioExamAnt}</span></div>`;
-      if (bioResAnt) html += `<div class="medicament"><span class="nom">Résultat antérieur :</span> <span class="detail">${bioResAnt}</span></div>`;
-      if (bioGPA) html += `<div class="medicament"><span class="nom">G P A :</span> <span class="detail">${bioGPA}</span></div>`;
-      if (bioDDR) html += `<div class="medicament"><span class="nom">DDR :</span> <span class="detail">${bioDDR}</span></div>`;
-      if (bioMeno) html += `<div class="medicament"><span class="nom">Ménopause :</span> <span class="detail">${bioMeno}</span></div>`;
-      if (bioAtcd) html += `<div class="medicament"><span class="nom">Autres ATCD :</span> <span class="detail">${bioAtcd}</span></div>`;
-      html += `<div class="section"><span class="label">Prélèvement</span></div>`;
-      if (bioDatePrelev) html += `<div class="medicament"><span class="nom">Date prélèvement :</span> <span class="detail">${bioDatePrelev}</span></div>`;
-      if (bioFixateur) html += `<div class="medicament"><span class="nom">Fixateur :</span> <span class="detail">${bioFixateur}</span></div>`;
-      if (bioOrgane) html += `<div class="medicament"><span class="nom">Organe :</span> <span class="detail">${bioOrgane}</span></div>`;
-      if (bioNature) {
-        let nat = bioNature;
-        if (bioNature === "Autre" && bioNatureAutre) nat += ` (${bioNatureAutre})`;
-        html += `<div class="medicament"><span class="nom">Nature :</span> <span class="detail">${nat}</span></div>`;
-      }
-      if (bioSuspicion) html += `<div class="medicament"><span class="nom">Suspicion :</span> <span class="detail">${bioSuspicion}</span></div>`;
-      if (bioFaitA || bioFaitLe) {
-        html += `<div class="medicament"><span class="nom">Fait à :</span> <span class="detail">${bioFaitA}${bioFaitLe ? ` le ${bioFaitLe}` : ''}</span></div>`;
-      }
-      if (bioNote) html += `<div class="medicament"><span class="nom">Note :</span> <span class="detail">${bioNote}</span></div>`;
-    }
-
-    if (tab === "ext") {
-      if (extService) html += `<div class="medicament"><span class="nom">Service demandeur :</span> <span class="detail">${extService}</span></div>`;
-      if (extChirurgien) html += `<div class="medicament"><span class="nom">Chirurgien :</span> <span class="detail">${extChirurgien}</span></div>`;
-      if (extPoste) html += `<div class="medicament"><span class="nom">Poste bloc :</span> <span class="detail">${extPoste}</span></div>`;
-      if (extIntervention) html += `<div class="medicament"><span class="nom">Intervention :</span> <span class="detail">${extIntervention}</span></div>`;
-      if (extNature) html += `<div class="medicament"><span class="nom">Nature prélèvement :</span> <span class="detail">${extNature}</span></div>`;
-      if (extOrgane) html += `<div class="medicament"><span class="nom">Organe :</span> <span class="detail">${extOrgane}</span></div>`;
-      if (extQuestion) html += `<div class="medicament"><span class="nom">Question clinique :</span> <span class="detail">${extQuestion}</span></div>`;
-      if (extHeure) html += `<div class="medicament"><span class="nom">Heure prélèvement :</span> <span class="detail">${extHeure}</span></div>`;
-      if (extNote) html += `<div class="medicament"><span class="nom">Note :</span> <span class="detail">${extNote}</span></div>`;
-    }
-
-    if (alertes) html += `<div class="notice">⚠️ ${alertes}</div>`;
-    html += `</div>`;
-    return html;
-  }
-
   function buildData() {
     if (tab === "fcv")  return { renseign, service: fcvService, gpa: fcvGPA, ddr: fcvDDR, menopause: fcvMeno, menarche: fcvMenarche, rapport: fcvRapport, contraception: fcvContra, traitement: fcvTtt, papLieu: fcvPapLieu, papNb: fcvPapNb, papDate: fcvPapDate, papRes: fcvPapRes, atcd: fcvAtcd, methode: fcvMeth, note: fcvNote };
     if (tab === "cyto") return { renseign, service: cytoService, siege: cytoSiege, organe: cytoOrgane, fixateur: cytoFix, fixateurAutre: cytoFixAutre, note: cytoNotes };
@@ -246,18 +185,32 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
         data: buildData(),
       });
       if (tab === "ext") setTimerActive(true);
-      openSummaryWindow('Anatomie Pathologique', buildAnapathSummary());
+      setValidatedPrescription({
+        urgence,
+        alertes,
+        renseign,
+        tab,
+        fcvService, fcvGPA, fcvDDR, fcvMeno, fcvMenarche, fcvRapport, fcvContra, fcvTtt, fcvPapLieu, fcvPapNb, fcvPapDate, fcvPapRes, fcvAtcd, fcvMeth, fcvNote,
+        cytoService, cytoSiege, cytoOrgane, cytoFix, cytoFixAutre, cytoNotes,
+        liqService, liqUnite, liqNat, liqNatAutre, liqNotes,
+        bioService, bioExamAnt, bioResAnt, bioGPA, bioDDR, bioMeno, bioAtcd, bioDatePrelev, bioFixateur, bioOrgane, bioNature, bioNatureAutre, bioSuspicion, bioFaitA, bioFaitLe, bioNote,
+        extService, extChirurgien, extPoste, extIntervention, extNature, extOrgane, extQuestion, extHeure, extNote,
+        patient: {
+          ...patient,
+          age,
+          sexeLabel,
+        },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+      });
+      setShowValidationModal(true);
       showToast("Demande Anapath transmise");
       setRenseign(""); setAlertes(""); setUrgence("n");
     } catch { setApiError("Erreur lors de l'envoi. Vérifiez la connexion."); }
     finally { setLoading(false); }
   }
 
-  function bioInfoLabel() {
-    if (tab === "pos") return "POS (Pièce Opératoire Simple)";
-    if (tab === "poc") return "POC (Pièce Opératoire Complexe)";
-    return "Biopsie";
-  }
+
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }}>
@@ -271,7 +224,7 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
         )}
 
         <div className="card mb12">
-          <label className="lbl">Type d'examen <span className="req">*</span></label>
+          <label className="lbl">Type d&apos;examen <span className="req">*</span></label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
             {TABS.map(t => (
               <button key={t.key} style={chipStyle(tab === t.key)} onClick={() => setTab(t.key)}>{t.label}</button>
@@ -384,7 +337,7 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
             <div className="mb12"><label className="lbl">Unité / Service demandeur</label><input type="text" value={bioService} onChange={e => setBioService(e.target.value)} placeholder="Service clinique prescripteur" /></div>
             <div className="sh mb12">Antécédents</div>
             <div className="g2 mb12">
-              <div><label className="lbl">Examen(s) antérieur(s)</label><input type="text" value={bioExamAnt} onChange={e => setBioExamAnt(e.target.value)} placeholder="Type d'examen" /></div>
+              <div><label className="lbl">Examen(s) antérieur(s)</label><input type="text" value={bioExamAnt} onChange={e => setBioExamAnt(e.target.value)} placeholder="Type d&apos;examen" /></div>
               <div><label className="lbl">Résultat(s)</label><input type="text" value={bioResAnt} onChange={e => setBioResAnt(e.target.value)} placeholder="Résultat" /></div>
               <div><label className="lbl">G P A (si applicable)</label><input type="text" value={bioGPA} onChange={e => setBioGPA(e.target.value)} placeholder="Ex : G3 P2 A1" /></div>
               <div><label className="lbl">DDR (si applicable)</label><input type="date" value={bioDDR} onChange={e => setBioDDR(e.target.value)} /></div>
@@ -455,7 +408,7 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
               <div><label className="lbl">Chirurgien en salle <span className="req">*</span></label><input type="text" value={extChirurgien} onChange={e => setExtChirurgien(e.target.value)} placeholder="Dr. _______________" /></div>
               <div><label className="lbl">Poste téléphonique du bloc <span className="req">*</span></label><input type="text" value={extPoste} onChange={e => setExtPoste(e.target.value)} placeholder="Ex : 2741 — résultat communiqué par téléphone" /></div>
             </div>
-            <div className="mb12"><label className="lbl">Type d'intervention chirurgicale en cours <span className="req">*</span></label><input type="text" value={extIntervention} onChange={e => setExtIntervention(e.target.value)} placeholder="Ex : Thyroïdectomie, résection tumorale côlon, mastectomie..." /></div>
+            <div className="mb12"><label className="lbl">Type d&apos;intervention chirurgicale en cours <span className="req">*</span></label><input type="text" value={extIntervention} onChange={e => setExtIntervention(e.target.value)} placeholder="Ex : Thyroïdectomie, résection tumorale côlon, mastectomie..." /></div>
             <div className="mb12">
               <label className="lbl">Nature du prélèvement <span className="req">*</span></label>
               <div className="g2">
@@ -490,7 +443,7 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
       {/* COLONNE DROITE — sticky */}
       <div style={{ position: 'sticky', top: 16 }}>
         <div className="card mb12" style={{ padding: 10 }}>
-          <label className="lbl">Degré d'urgence <span className="req">*</span></label>
+          <label className="lbl">Degré d&apos;urgence <span className="req">*</span></label>
           <div className={`urgr ${urgenceClasses[urgence]}`} style={{ marginBottom: 10 }}>
             <div className="urgd" />
             <select className="urgs" value={urgence} onChange={e => setUrgence(e.target.value as Urgence)}>
@@ -530,10 +483,85 @@ export default function AnapathForm({ patient, prescripteur }: Props) {
         <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
           <div className="mbox">
             <h3>Confirmer la demande ?</h3>
-            <p>La demande sera transmise au service d'Anatomie Pathologique.{tab === "ext" && " La minuterie de 30 min démarrera à la validation."}</p>
+            <p>La demande sera transmise au service d&apos;Anatomie Pathologique.{tab === "ext" && " La minuterie de 30 min démarrera à la validation."}</p>
             <div className="mbtns">
               <button className="bca" onClick={() => setShowModal(false)}>Annuler</button>
               <button className="bok" onClick={handleSubmit}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showValidationModal && validatedPrescription && (
+        <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowValidationModal(false); }}>
+          <div className="mbox" style={{ maxWidth: 600, width: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--navy)', color: '#fff', padding: '16px 20px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ms" style={{ fontSize: 24 }}>check_circle</span>
+              <div>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 800, margin: 0 }}>Demande Anapath validée</h3>
+                <p style={{ fontSize: 12, opacity: 0.9, margin: '4px 0 0 0' }}>{validatedPrescription.date}</p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Patient Info */}
+              <div style={{ background: 'var(--navy-lt)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="ms" style={{ fontSize: 22, color: '#fff' }}>person</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Patient</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{validatedPrescription.patient.prenom} {validatedPrescription.patient.nom}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
+                  {validatedPrescription.patient.sexe && <span><strong>Sexe:</strong> {validatedPrescription.patient.sexe === 'M' ? 'Masculin' : validatedPrescription.patient.sexe === 'F' ? 'Féminin' : validatedPrescription.patient.sexe}</span>}
+                  {validatedPrescription.patient.age && <span><strong>Âge:</strong> {validatedPrescription.patient.age} ans</span>}
+                  {validatedPrescription.patient.groupeSanguin && <span><strong>Groupe sanguin:</strong> {validatedPrescription.patient.groupeSanguin}</span>}
+                </div>
+                {validatedPrescription.patient.allergies && validatedPrescription.patient.allergies.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ms" style={{ fontSize: 14 }}>warning</span>
+                    <strong>Allergies:</strong> {validatedPrescription.patient.allergies.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescriber Info */}
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--txt2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ fontSize: 22, color: '#fff' }}>medical_services</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Prescripteur</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Dr {validatedPrescription.prescripteur.prenom} {validatedPrescription.prescripteur.nom}</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.prescripteur.service || 'Service non spécifié'}</div>
+                </div>
+              </div>
+
+              {/* Exam Type */}
+              <div style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>Type d&apos;examen</div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{TABS.find(t => t.key === validatedPrescription.tab)?.label}</div>
+              </div>
+
+              {/* Urgence */}
+              <div style={{ background: validatedPrescription.urgence === 'n' ? '#dcfce7' : validatedPrescription.urgence === 'u' ? '#fef3c7' : '#fee2e2', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b', marginBottom: 4 }}>Degré d&apos;urgence</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b' }}>{validatedPrescription.urgence === 'n' ? 'Normal' : validatedPrescription.urgence === 'u' ? 'Urgent' : 'STAT'}</div>
+              </div>
+
+              {/* Alertes */}
+              {validatedPrescription.alertes && (
+                <div style={{ background: 'var(--red-lt)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--red)', marginBottom: 4 }}>Alertes</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.alertes}</div>
+                </div>
+              )}
+
+              <div className="mbtns" style={{ marginTop: 20 }}>
+                <button className="bok" onClick={() => setShowValidationModal(false)}>Fermer</button>
+              </div>
             </div>
           </div>
         </div>

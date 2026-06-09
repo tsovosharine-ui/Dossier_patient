@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { openSummaryWindow } from '@/lib/printPrescription';
 import { creerPrescriptionMedicale, getPrescriptionsPatient, terminerPrescription as apiTerminerPrescription } from '@/lib/prescriptionApi';
 
 interface Medicament {
@@ -10,8 +9,9 @@ interface Medicament {
   dose: string;
   quantite: number;
   voie: string;
-  frequence: string;
-  duree: string;
+  frequenceType: string;
+  frequenceValeur: number;
+  dureeJours: number;
   dateDebut: string;
   heureDebut: string;
   instructions: string;
@@ -54,8 +54,58 @@ const STOCK_MEDICAMENTS: StockItem[] = [
 ];
 
 interface Props {
-  patient: { id: string; nom?: string; prenom?: string };
-  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string; poste?: string };
+  patient: { 
+    id: string; 
+    nom?: string; 
+    prenom?: string;
+    sexe?: string;
+    dateNaissance?: string;
+    allergies?: string[];
+    groupeSanguin?: string;
+  };
+  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string };
+}
+
+function calcAge(dateNaissance?: string): number | null {
+  if (!dateNaissance) return null;
+  const diff = Date.now() - new Date(dateNaissance).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+interface ValidatedPrescription {
+  medicaments: Medicament[];
+  remarques: string;
+  notifier: boolean;
+  patient: Props["patient"] & { age: number | null; sexeLabel?: string };
+  prescripteur: Props["prescripteur"];
+  date: string;
+  isOrdonnance?: boolean;
+}
+
+function parseDureeMs(d: string): number {
+  const parts = d.split(' ');
+  if (parts.length !== 2) return 0;
+  const val = Number(parts[0]);
+  const unit = parts[1];
+  if (isNaN(val)) return 0;
+  switch (unit) {
+    case 'heures': return val * 3600_000;
+    case 'jours':  return val * 86400_000;
+    case 'mois':   return val * 30 * 86400_000;
+    default: return 0;
+  }
+}
+
+function filterExpired(prescriptions: PrescriptionEnCours[]): PrescriptionEnCours[] {
+  const now = Date.now();
+  return prescriptions.filter(p => {
+    if (p.statut !== 'ACTIVE') return false;
+    return p.medicaments?.some(med => {
+      if (!med.dateDebut || !med.duree) return true;
+      const start = new Date(med.dateDebut).getTime();
+      return (start + parseDureeMs(med.duree)) > now;
+    });
+  });
 }
 
 export default function MedicaleForm({ patient, prescripteur }: Props) {
@@ -64,9 +114,9 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
   const [dose, setDose] = useState('');
   const [quantite, setQuantite] = useState(1);
   const [voie, setVoie] = useState('');
-  const [frequence, setFrequence] = useState('');
-  const [duree, setDuree] = useState('');
-  const [dureeUnite, setDureeUnite] = useState('jours');
+  const [frequenceType, setFrequenceType] = useState('');
+  const [frequenceValeur, setFrequenceValeur] = useState<number>(0);
+  const [dureeJours, setDureeJours] = useState<number>(0);
   const [dateDebut, setDateDebut] = useState('');
   const [heureDebut, setHeureDebut] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -83,42 +133,20 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
   const [showOrdonnanceModal, setShowOrdonnanceModal] = useState(false);
   const [ordonnanceItems, setOrdonnanceItems] = useState<Map<string, number>>(new Map());
   const [prescriptionsEnCours, setPrescriptionsEnCours] = useState<PrescriptionEnCours[]>([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validatedPrescription, setValidatedPrescription] = useState<ValidatedPrescription | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const isFormValid = nom.trim() && dose.trim() && frequence && duree.trim() && !isNaN(Number(duree));
+  const age = calcAge(patient?.dateNaissance);
+  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
+
+  const isFormValid = nom.trim() && dose.trim() && frequenceType && dureeJours > 0 && (frequenceType === 'SOS' || frequenceType === 'CONTINU' || frequenceValeur > 0);
   const canValidate = medicaments.length > 0;
-
-  function parseDureeMs(d: string): number {
-    const parts = d.split(' ');
-    if (parts.length !== 2) return 0;
-    const val = Number(parts[0]);
-    const unit = parts[1];
-    if (isNaN(val)) return 0;
-    switch (unit) {
-      case 'heures': return val * 3600_000;
-      case 'jours':  return val * 86400_000;
-      case 'mois':   return val * 30 * 86400_000;
-      default: return 0;
-    }
-  }
-
-  function filterExpired(prescriptions: PrescriptionEnCours[]): PrescriptionEnCours[] {
-    const now = Date.now();
-    return prescriptions.filter(p => {
-      if (p.statut !== 'ACTIVE') return false;
-      return p.medicaments?.some(med => {
-        if (!med.dateDebut || !med.duree) return true;
-        const start = new Date(med.dateDebut).getTime();
-        return (start + parseDureeMs(med.duree)) > now;
-      });
-    });
-  }
 
   useEffect(() => {
     async function fetchPrescriptions() {
       try {
         const data = await getPrescriptionsPatient('medicale', patient.id);
-    console.log("📦 Données brutes reçues :", data);
         setPrescriptionsEnCours(filterExpired(data));
       } catch {}
     }
@@ -162,22 +190,24 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
     const newErrors: Record<string, string> = {};
     if (!nom.trim()) newErrors.nom = 'Le médicament est requis';
     if (!dose.trim()) newErrors.dose = 'La dose est requise';
-    if (!frequence) newErrors.frequence = 'La fréquence est requise';
-    if (!duree.trim() || isNaN(Number(duree))) newErrors.duree = 'Veuillez entrer un nombre valide';
+    if (!frequenceType) newErrors.frequenceType = 'Le type de fréquence est requis';
+    if ((frequenceType === 'HEURES' || frequenceType === 'PAR_JOUR') && frequenceValeur <= 0) {
+      newErrors.frequenceValeur = 'La valeur de fréquence est requise';
+    }
+    if (dureeJours <= 0) newErrors.dureeJours = 'La durée en jours est requise';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
 
   const ajouterMedicament = () => {
     if (!validateAddForm()) return;
-    const dureeComplete = `${duree} ${dureeUnite}`;
     setMedicaments([...medicaments, {
       id: Date.now().toString(),
-      nom, dose, quantite, voie, frequence, duree: dureeComplete,
+      nom, dose, quantite, voie, frequenceType, frequenceValeur, dureeJours,
       dateDebut, heureDebut, instructions, remarques
     }]);
-    setNom(''); setDose(''); setQuantite(1); setVoie(''); setFrequence('');
-    setDuree(''); setDureeUnite('jours'); setDateDebut(''); setHeureDebut('');
+    setNom(''); setDose(''); setQuantite(1); setVoie(''); setFrequenceType('');
+    setFrequenceValeur(0); setDureeJours(0); setDateDebut(''); setHeureDebut('');
     setInstructions(''); setRemarques(''); setErrors({});
     setShowSuggestions(false);
   };
@@ -191,20 +221,14 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
     } catch {}
   }
 
-  function buildMedicaleSummary(meds: Medicament[], remarques: string, notifier: boolean): string {
-    const now = new Date().toLocaleString('fr-FR');
-    let html = `<div class="card"><div class="patient">Date : ${now}</div>`;
-    meds.forEach(m => {
-      html += `
-        <div class="medicament">
-          <span class="nom">${m.nom} ${m.dose}</span>
-          <span class="detail">Quantité : ${m.quantite} · ${m.frequence}${m.voie ? ` · ${m.voie.toLowerCase()}` : ''} · Pendant ${m.duree}.</span>
-        </div>`;
-    });
-    if (remarques) html += `<div class="notice">⚠️ ${remarques}</div>`;
-    if (notifier) html += `<div class="notice"><span class="badge badge-success">✅ Infirmier notifié</span></div>`;
-    html += `</div>`;
-    return html;
+  function getFrequenceText(type: string, valeur: number): string {
+    switch (type) {
+      case 'HEURES': return `Toutes les ${valeur}h`;
+      case 'PAR_JOUR': return `${valeur}× par jour`;
+      case 'SOS': return 'Si besoin (SOS)';
+      case 'CONTINU': return 'En continu (perfusion)';
+      default: return type;
+    }
   }
 
   async function handleSubmitPrescription() {
@@ -218,18 +242,36 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
         prescripteurId: prescripteur.id,
         remarques: remarqueGenerale,
         notifierInfirmier: notifier,
-        medicaments: medicaments.map(({ id, dateDebut, heureDebut, duree, ...rest }) => ({
-          ...rest,
-          quantite: rest.quantite,
-          duree,
-          dateDebut: dateDebut || undefined,
-          heureDebut: heureDebut || undefined,
+        medicaments: medicaments.map(m => ({
+          nom: m.nom,
+          dose: m.dose,
+          quantite: m.quantite,
+          voie: m.voie,
+          frequenceType: m.frequenceType,
+          frequenceValeur: m.frequenceValeur,
+          dureeJours: m.dureeJours,
+          instructions: m.instructions,
+          remarques: m.remarques,
+          dateDebut: m.dateDebut || undefined,
+          heureDebut: m.heureDebut || undefined,
         })),
       });
       if (notifier && result?.id) {
 
       }
-      openSummaryWindow('Prescription médicamenteuse', buildMedicaleSummary(medicaments, remarqueGenerale, notifier));
+      setValidatedPrescription({
+        medicaments: [...medicaments],
+        remarques: remarqueGenerale,
+        notifier,
+        patient: {
+          ...patient,
+          age,
+          sexeLabel,
+        },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+      });
+      setShowValidationModal(true);
       showToast('Prescription médicamenteuse validée');
       setMedicaments([]);
       setRemarqueGenerale('');
@@ -261,23 +303,40 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
         prescripteurId: prescripteur.id,
         remarques: remarqueGenerale,
         notifierInfirmier: notifier,
-        medicaments: medicaments.map(({ id, dateDebut, heureDebut, duree, ...rest }) => ({
-          ...rest,
-          quantite: rest.quantite,
-          duree,
-          dateDebut: dateDebut || undefined,
-          heureDebut: heureDebut || undefined,
+        medicaments: medicaments.map(m => ({
+          nom: m.nom,
+          dose: m.dose,
+          quantite: m.quantite,
+          voie: m.voie,
+          frequenceType: m.frequenceType,
+          frequenceValeur: m.frequenceValeur,
+          dureeJours: m.dureeJours,
+          instructions: m.instructions,
+          remarques: m.remarques,
+          dateDebut: m.dateDebut || undefined,
+          heureDebut: m.heureDebut || undefined,
         })),
       });
       if (notifier && result?.id) {
 
       }
-      openSummaryWindow('Ordonnance transmise à la pharmacie', buildMedicaleSummary(medicaments, remarqueGenerale, notifier));
-      const medsPourOrdonnance = medicaments
-        .filter(m => (ordonnanceItems.get(m.id) ?? 0) > 0)
-        .map(m => ({
-          nom: m.nom, dose: m.dose, quantite: ordonnanceItems.get(m.id) ?? m.quantite,
-        }));
+      setValidatedPrescription({
+        medicaments: medicaments.filter(m => (ordonnanceItems.get(m.id) ?? 0) > 0).map(m => ({
+          ...m,
+          quantite: ordonnanceItems.get(m.id) ?? m.quantite,
+        })),
+        remarques: remarqueGenerale,
+        notifier,
+        patient: {
+          ...patient,
+          age,
+          sexeLabel,
+        },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+        isOrdonnance: true,
+      });
+      setShowValidationModal(true);
       showToast('Ordonnance créée avec les médicaments sélectionnés');
       setMedicaments([]);
       setRemarqueGenerale('');
@@ -351,29 +410,37 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
             </div>
             <div><label className="lbl">Quantité</label><input type="number" min={1} value={quantite} onChange={e => setQuantite(Math.max(1, parseInt(e.target.value) || 1))} /></div>
           </div>
-          <div className="mb12"><label className="lbl">Voie d'administration</label><select value={voie} onChange={e => setVoie(e.target.value)}><option value="">Sélectionner</option><option>Orale (per os)</option><option>Intraveineuse (IV)</option><option>Intramusculaire (IM)</option><option>Sous-cutanée (SC)</option><option>Rectale</option><option>Topique / locale</option><option>Inhalation</option><option>Sublinguale</option></select></div>
+          <div className="mb12"><label className="lbl">Voie d&apos;administration</label><select value={voie} onChange={e => setVoie(e.target.value)}><option value="">Sélectionner</option><option>Orale (per os)</option><option>Intraveineuse (IV)</option><option>Intramusculaire (IM)</option><option>Sous-cutanée (SC)</option><option>Rectale</option><option>Topique / locale</option><option>Inhalation</option><option>Sublinguale</option></select></div>
           <div className="g2 mb12">
             <div>
-              <label className="lbl">Fréquence <span className="req">*</span></label>
-              <select value={frequence} onChange={e => { setFrequence(e.target.value); if (errors.frequence) setErrors({...errors, frequence: ''}); }} style={errors.frequence ? { borderColor: 'var(--red)' } : {}}>
-                <option value="">Sélectionner</option><option>1× par jour</option><option>2× par jour (toutes les 12h)</option><option>3× par jour (toutes les 8h)</option><option>4× par jour (toutes les 6h)</option><option>Toutes les 4h</option><option>En continu (perfusion)</option><option>Si besoin (SOS)</option><option>Dose unique</option>
+              <label className="lbl">Type de fréquence <span className="req">*</span></label>
+              <select value={frequenceType} onChange={e => { setFrequenceType(e.target.value); if (errors.frequenceType) setErrors({...errors, frequenceType: ''}); }} style={errors.frequenceType ? { borderColor: 'var(--red)' } : {}}>
+                <option value="">Sélectionner</option>
+                <option value="HEURES">Toutes les X heures</option>
+                <option value="PAR_JOUR">X fois par jour</option>
+                <option value="SOS">Si besoin (SOS)</option>
+                <option value="CONTINU">En continu (perfusion)</option>
               </select>
-              {errors.frequence && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequence}</div>}
+              {errors.frequenceType && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequenceType}</div>}
             </div>
             <div>
-              <label className="lbl">Durée <span className="req">*</span></label>
-              <div className="g2">
-                <input type="text" value={duree} onChange={e => { setDuree(e.target.value); if (errors.duree) setErrors({...errors, duree: ''}); }} placeholder="Ex : 7" style={errors.duree ? { borderColor: 'var(--red)' } : {}} />
-                <select value={dureeUnite} onChange={e => setDureeUnite(e.target.value)}><option value="heures">heures</option><option value="jours">jours</option><option value="mois">mois</option></select>
-              </div>
-              {errors.duree && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.duree}</div>}
+              <label className="lbl">Durée (jours) <span className="req">*</span></label>
+              <input type="number" min={1} value={dureeJours || ''} onChange={e => { setDureeJours(parseInt(e.target.value) || 0); if (errors.dureeJours) setErrors({...errors, dureeJours: ''}); }} placeholder="Ex : 7" style={errors.dureeJours ? { borderColor: 'var(--red)' } : {}} />
+              {errors.dureeJours && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.dureeJours}</div>}
             </div>
           </div>
+          {(frequenceType === 'HEURES' || frequenceType === 'PAR_JOUR') && (
+            <div className="mb12">
+              <label className="lbl">Valeur <span className="req">*</span></label>
+              <input type="number" min={1} value={frequenceValeur || ''} onChange={e => { setFrequenceValeur(parseInt(e.target.value) || 0); if (errors.frequenceValeur) setErrors({...errors, frequenceValeur: ''}); }} placeholder={frequenceType === 'HEURES' ? 'Ex : 8 (pour toutes les 8h)' : 'Ex : 3 (pour 3 fois par jour)'} style={errors.frequenceValeur ? { borderColor: 'var(--red)' } : {}} />
+              {errors.frequenceValeur && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequenceValeur}</div>}
+            </div>
+          )}
           <div className="g2 mb12">
             <div><label className="lbl">Date de début</label><input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)}/></div>
             <div><label className="lbl">Heure de début</label><input type="time" value={heureDebut} onChange={e => setHeureDebut(e.target.value)}/></div>
           </div>
-          <div className="mb12"><label className="lbl">Instructions d'utilisation</label><input type="text" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Ex : à prendre après les repas..."/></div>
+          <div className="mb12"><label className="lbl">Instructions d&apos;utilisation</label><input type="text" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Ex : à prendre après les repas..."/></div>
           <div className="mb12"><label className="lbl">Remarques</label><input type="text" value={remarques} onChange={e => setRemarques(e.target.value)} placeholder="Précisions complémentaires..."/></div>
           <button className="badd" onClick={ajouterMedicament} style={{ opacity: isFormValid ? 1 : 0.5 }}>
             <span className="ms" style={{fontSize:17}}>add</span> Ajouter à la prescription
@@ -389,7 +456,7 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
               <div className="rxi-ic"><span className="ms">medication</span></div>
               <div className="rxi-m">
                 <h4>{m.nom} {m.dose} — qté : {m.quantite}</h4>
-                <p>{m.frequence} · {m.duree} {m.voie && `· ${m.voie}`}</p>
+                <p>{getFrequenceText(m.frequenceType, m.frequenceValeur)} · {m.dureeJours} jours {m.voie && `· ${m.voie}`}</p>
                 {(m.dateDebut || m.heureDebut) && <p style={{fontSize:11,color:'var(--txt3)',marginTop:3}}>{m.dateDebut && `Début : ${m.dateDebut}`}{m.heureDebut && ` à ${m.heureDebut}`}</p>}
                 {m.instructions && <p style={{fontSize:11,color:'var(--txt3)',marginTop:2}}>{m.instructions}</p>}
               </div>
@@ -488,7 +555,7 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
                   <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bdr)' }}>
                     <div style={{ flex: 1 }}>
                       <strong style={{ fontSize: 13 }}>{m.nom} {m.dose}</strong>
-                      <span style={{ fontSize: 11, color: 'var(--txt3)', display: 'block' }}>{m.frequence} · {m.duree}</span>
+                      <span style={{ fontSize: 11, color: 'var(--txt3)', display: 'block' }}>{getFrequenceText(m.frequenceType, m.frequenceValeur)} · {m.dureeJours} jours</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input
@@ -520,8 +587,101 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
             <div className="mbtns">
               <button className="bca" onClick={() => setShowOrdonnanceModal(false)}>Annuler</button>
               <button className="bok" onClick={handleCreateOrdonnance} disabled={loading}>
-                Valider l'ordonnance
+                Valider l&apos;ordonnance
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showValidationModal && validatedPrescription && (
+        <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowValidationModal(false); }}>
+          <div className="mbox" style={{ maxWidth: 600, width: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--navy)', color: '#fff', padding: '16px 20px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ms" style={{ fontSize: 24 }}>check_circle</span>
+              <div>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 800, margin: 0 }}>{validatedPrescription.isOrdonnance ? 'Ordonnance transmise à la pharmacie' : 'Prescription médicamenteuse validée'}</h3>
+                <p style={{ fontSize: 12, opacity: 0.9, margin: '4px 0 0 0' }}>{validatedPrescription.date}</p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Patient Info */}
+              <div style={{ background: 'var(--navy-lt)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="ms" style={{ fontSize: 22, color: '#fff' }}>person</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Patient</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{validatedPrescription.patient.prenom} {validatedPrescription.patient.nom}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
+                  {validatedPrescription.patient.sexe && <span><strong>Sexe:</strong> {validatedPrescription.patient.sexe === 'M' ? 'Masculin' : validatedPrescription.patient.sexe === 'F' ? 'Féminin' : validatedPrescription.patient.sexe}</span>}
+                  {validatedPrescription.patient.age && <span><strong>Âge:</strong> {validatedPrescription.patient.age} ans</span>}
+                  {validatedPrescription.patient.groupeSanguin && <span><strong>Groupe sanguin:</strong> {validatedPrescription.patient.groupeSanguin}</span>}
+                </div>
+                {validatedPrescription.patient.allergies && validatedPrescription.patient.allergies.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ms" style={{ fontSize: 14 }}>warning</span>
+                    <strong>Allergies:</strong> {validatedPrescription.patient.allergies.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescriber Info */}
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--txt2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ fontSize: 22, color: '#fff' }}>medical_services</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Prescripteur</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Dr {validatedPrescription.prescripteur.prenom} {validatedPrescription.prescripteur.nom}</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.prescripteur.service || 'Service non spécifié'}</div>
+                </div>
+              </div>
+
+              {/* Medications */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 12 }}>Médicaments prescrits</div>
+                {validatedPrescription.medicaments.map((m: Medicament, idx: number) => (
+                  <div key={idx} style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--navy-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="ms" style={{ fontSize: 18, color: 'var(--navy)' }}>medication</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>{m.nom} {m.dose}</div>
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', lineHeight: 1.5 }}>
+                        Quantité: <strong>{m.quantite}</strong> · {getFrequenceText(m.frequenceType, m.frequenceValeur)}{m.voie ? ` · ${m.voie}` : ''} · Pendant <strong>{m.dureeJours} jours</strong>
+                      </div>
+                      {m.instructions && <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 4, fontStyle: 'italic' }}>{m.instructions}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Remarks */}
+              {validatedPrescription.remarques && (
+                <div style={{ background: 'var(--navy-lt)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--navy)', marginBottom: 6 }}>Remarques</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.remarques}</div>
+                </div>
+              )}
+
+              {/* Notification Status */}
+              {validatedPrescription.notifier && (
+                <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="ms" style={{ fontSize: 20, color: '#16a34a' }}>check_circle</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>Infirmiers notifiés</div>
+                    <div style={{ fontSize: 11, color: '#15803d' }}>Notification envoyée au service clinique</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mbtns" style={{ marginTop: 20 }}>
+                <button className="bok" onClick={() => setShowValidationModal(false)}>Fermer</button>
+              </div>
             </div>
           </div>
         </div>

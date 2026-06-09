@@ -5,7 +5,7 @@ import NotificationBell from '@/components/ui/NotificationBell';
 export type Section =
   | 'med' | 'nm' | 'surv' | 'trans'
   | 'labo' | 'imag' | 'eeg' | 'kine' | 'endo' | 'dial' | 'ana'
-  | 'bloc' | 'para';
+  | 'bloc' | 'para' | 'hist';
 
 interface PrescriptionLayoutProps {
   patient?: {
@@ -42,6 +42,7 @@ export default function PrescriptionLayout({ patient, prescripteur, children }: 
     {id:'trans',icon:'bloodtype',        label:'Transfusion'},
     {id:'para', icon:'biotech',          label:'Para-clinique'},
     {id:'bloc', icon:'medical_services', label:'Bloc Opératoire'},
+    {id:'hist', icon:'history',          label:'Historique'},
   ];
 
   const paraItems = [

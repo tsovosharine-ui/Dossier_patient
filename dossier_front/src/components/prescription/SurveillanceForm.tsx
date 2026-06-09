@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { openSummaryWindow } from '@/lib/printPrescription';
 import { creerPrescriptionSurveillance, getPrescriptionsPatient, terminerPrescription as apiTerminerPrescription } from '@/lib/prescriptionApi';
 
 interface SvItem {
   id: string; parametre: string; parametreLabel: string; customNom: string; customDesc: string;
   customUnite: string; customTarget: string; taille: string; sngTypes: string[]; sngRemarques: string;
-  drainLocalisation: string; drainTypes: string[]; frequence: string; duree: string; seuil: string;
+  drainLocalisation: string; drainTypes: string[]; frequenceType: string; frequenceValeur: number; dureeJours: number; seuil: string;
 }
 
 interface SurveillanceEnCours {
+  statut?: string;
   id: string;
   parametres: { parametre: string; frequence: string; duree?: string; seuil?: string }[];
   notifierInfirmier?: boolean;
@@ -31,7 +31,6 @@ const PARAMS = [
   { group: 'Métabolique / Biologique', options: [
     { value: 'temp', label: 'Température', desc: 'Mesure axillaire ou tympanique. Alerter si > 38.5°C ou < 36°C.' },
     { value: 'glyc', label: 'Glycémie capillaire', desc: 'Dextro au bout du doigt. Alerter si < 0.6 g/l ou > 2.5 g/l.' },
-    { value: 'imc', label: 'IMC', desc: 'Calcul automatique à partir du poids et de la taille renseignée.' },
   ]},
   { group: 'Diurèse / Hydrique', options: [
     { value: 'diur', label: 'Diurèse', desc: 'Mesurer la quantité d\'urines émises. Alerter si < 0.5 ml/kg/h.' },
@@ -52,11 +51,34 @@ const PARAM_LABEL: Record<string, string> = {}; const PARAM_DESC: Record<string,
 PARAMS.forEach(g => g.options.forEach(o => { PARAM_LABEL[o.value] = o.label; PARAM_DESC[o.value] = o.desc; }));
 const SNG_TYPES = ['Résidu gastrique', 'Volume aspiré', 'Aspect', 'Perméabilité', 'Position'];
 const DRAIN_TYPES = ['Volume drainé', 'Aspect', 'Perméabilité', 'Point insertion'];
-const FREQ_OPTIONS = ['Toutes les heures', 'Toutes les 2h', 'Toutes les 4h', 'Toutes les 6h', 'Toutes les 8h', 'Toutes les 12h', '1× par jour', 'Avant chaque repas', 'En continu'];
+
 
 interface Props {
-  patient: { id: string; nom?: string; prenom?: string };
-  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string; poste?: string };
+  patient: { 
+    id: string; 
+    nom?: string; 
+    prenom?: string;
+    sexe?: string;
+    dateNaissance?: string;
+    allergies?: string[];
+    groupeSanguin?: string;
+  };
+  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string };
+}
+
+function calcAge(dateNaissance?: string): number | null {
+  if (!dateNaissance) return null;
+  const diff = Date.now() - new Date(dateNaissance).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+interface ValidatedPrescription {
+  items: SvItem[];
+  notifier: boolean;
+  notes: string;
+  patient: Props["patient"] & { age: number | null; sexeLabel?: string };
+  prescripteur: Props["prescripteur"];
+  date: string;
 }
 
 export default function SurveillanceForm({ patient, prescripteur }: Props) {
@@ -66,8 +88,8 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
   const [customUnite, setCustomUnite] = useState(''); const [customTarget, setCustomTarget] = useState(''); const [taille, setTaille] = useState('');
   const [sngTypes, setSngTypes] = useState<string[]>([]); const [sngRemarques, setSngRemarques] = useState('');
   const [drainLocalisation, setDrainLocalisation] = useState(''); const [drainTypes, setDrainTypes] = useState<string[]>([]);
-  const [frequence, setFrequence] = useState(''); const [duree, setDuree] = useState('');
-  const [dureeUnite, setDureeUnite] = useState('jours');
+  const [frequenceType, setFrequenceType] = useState(''); const [frequenceValeur, setFrequenceValeur] = useState<number>(0);
+  const [dureeJours, setDureeJours] = useState<number>(0);
   const [seuil, setSeuil] = useState('');
   const [items, setItems] = useState<SvItem[]>([]); const [notifOn, setNotifOn] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -76,16 +98,21 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [prescriptionsEnCours, setPrescriptionsEnCours] = useState<SurveillanceEnCours[]>([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validatedPrescription, setValidatedPrescription] = useState<ValidatedPrescription | null>(null);
+
+  const age = calcAge(patient?.dateNaissance);
+  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
 
   const canValidate = items.length > 0;
-  const isAddValid = parametre && frequence && duree.trim() && (Number(duree) > 0);
+  const isAddValid = parametre && frequenceType && dureeJours > 0 && (frequenceType === 'SOS' || frequenceType === 'CONTINU' || frequenceValeur > 0);
   const urgenceClasses: Record<string, string> = { n: "un", u: "uu", tu: "utu" };
 
   useEffect(() => {
     async function fetchSurveillances() {
       try {
         const data = await getPrescriptionsPatient('surveillance', patient.id);
-        setPrescriptionsEnCours(data.filter((p: any) => p.statut === 'ACTIVE'));
+        setPrescriptionsEnCours(data.filter((p: SurveillanceEnCours) => p.statut === 'ACTIVE'));
       } catch {}
     }
     fetchSurveillances();
@@ -97,30 +124,32 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
   function validateAddForm(): boolean {
     const newErrors: Record<string, string> = {};
     if (!parametre) newErrors.parametre = 'Le paramètre est requis';
-    if (!frequence) newErrors.frequence = 'La fréquence est requise';
-    if (!duree.trim() || isNaN(Number(duree))) newErrors.duree = 'Veuillez entrer un nombre valide';
+    if (!frequenceType) newErrors.frequenceType = 'Le type de fréquence est requis';
+    if (dureeJours <= 0) newErrors.dureeJours = 'La durée en jours est requise';
+    if ((frequenceType === 'HEURES' || frequenceType === 'PAR_JOUR') && frequenceValeur <= 0) {
+      newErrors.frequenceValeur = 'La valeur de fréquence est requise';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
 
   function handleAdd() {
     if (!validateAddForm()) return;
-    const dureeComplete = `${duree} ${dureeUnite}`;
     setItems(prev => [...prev, {
       id: Date.now().toString(), parametre, parametreLabel: parametre === 'custom' ? customNom || 'Paramètre personnalisé' : PARAM_LABEL[parametre] ?? parametre,
       customNom, customDesc, customUnite, customTarget, taille, sngTypes, sngRemarques,
-      drainLocalisation, drainTypes, frequence, duree: dureeComplete, seuil
+      drainLocalisation, drainTypes, frequenceType, frequenceValeur, dureeJours, seuil
     }]);
     setParametre(''); setCustomNom(''); setCustomDesc(''); setCustomUnite(''); setCustomTarget(''); setTaille('');
     setSngTypes([]); setSngRemarques(''); setDrainLocalisation(''); setDrainTypes([]);
-    setFrequence(''); setDuree(''); setDureeUnite('jours'); setSeuil(''); setErrors({});
+    setFrequenceType(''); setFrequenceValeur(0); setDureeJours(0); setSeuil(''); setErrors({});
   }
   function handleDelete(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
 
   async function refreshPrescriptions() {
     try {
       const data = await getPrescriptionsPatient('surveillance', patient.id);
-      setPrescriptionsEnCours(data.filter((p: any) => p.statut === 'ACTIVE'));
+      setPrescriptionsEnCours(data.filter((p: SurveillanceEnCours) => p.statut === 'ACTIVE'));
     } catch {}
   }
 
@@ -131,21 +160,16 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
     } catch { console.error('Erreur terminaison'); }
   }
 
-  function buildSurvSummary(itemsList: SvItem[], notifier: boolean): string {
-    const now = new Date().toLocaleString('fr-FR');
-    let html = `<div class="card"><div class="patient">Date : ${now}</div>`;
-    itemsList.forEach(item => {
-      const label = PARAM_LABEL[item.parametre] || item.parametreLabel;
-      html += `
-        <div class="medicament">
-          <span class="nom">${label}</span>
-          <span class="detail">Fréquence : ${item.frequence} · Durée : ${item.duree}${item.seuil ? ` · Seuil : ${item.seuil}` : ''}.</span>
-        </div>`;
-    });
-    if (notifier) html += `<div class="notice"><span class="badge badge-success">✅ Infirmier notifié</span></div>`;
-    html += `</div>`;
-    return html;
+  function getFrequenceText(type: string, valeur: number): string {
+    switch (type) {
+      case 'HEURES': return `Toutes les ${valeur}h`;
+      case 'PAR_JOUR': return `${valeur}× par jour`;
+      case 'SOS': return 'Si besoin (SOS)';
+      case 'CONTINU': return 'En continu';
+      default: return type;
+    }
   }
+
 
   async function handleSubmit() {
     setShowModal(false);
@@ -157,11 +181,29 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
         prescripteurId: prescripteur.id,
         notes,
         notifierInfirmier: notifOn,
-        parametres: items.map(({ id, parametreLabel, customNom, customDesc, customUnite, customTarget, taille, sngTypes, sngRemarques, drainLocalisation, drainTypes, ...rest }) => rest),
+        parametres: items.map(item => ({
+          parametre: item.parametre,
+          frequenceType: item.frequenceType,
+          frequenceValeur: item.frequenceValeur,
+          dureeJours: item.dureeJours,
+          seuil: item.seuil
+        })),
       });
       if (notifOn && result?.id) {
       }
-      openSummaryWindow('Prescription de surveillance', buildSurvSummary(items, notifOn));
+      setValidatedPrescription({
+        items: [...items],
+        notifier: notifOn,
+        notes,
+        patient: {
+          ...patient,
+          age,
+          sexeLabel,
+        },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+      });
+      setShowValidationModal(true);
       showToast('Surveillance validée');
       setItems([]);
       setNotes('');
@@ -203,7 +245,6 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
                 <div className="g2 mb12"><div><label className="lbl">Unité de mesure</label><input type="text" value={customUnite} onChange={e => setCustomUnite(e.target.value)} placeholder="Ex : ml, cm, mmHg..." /></div><div><label className="lbl">Valeurs normales</label><input type="text" value={customTarget} onChange={e => setCustomTarget(e.target.value)} placeholder="Plage de valeurs normales..." /></div></div>
               </div>
             )}
-            {parametre === 'imc' && <div className="mb12"><label className="lbl">Taille du patient (cm) <span className="req">*</span></label><input type="text" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Nécessaire au calcul de l'IMC" /></div>}
             {parametre === 'sng' && (
               <div className="mb12"><label className="lbl">Type de surveillance SNG</label><div className="g2 mb8">{SNG_TYPES.map(t => <label key={t} className="rc"><input type="checkbox" checked={sngTypes.includes(t)} onChange={() => toggleCheck(sngTypes, setSngTypes, t)} style={{ accentColor: 'var(--navy)' }} /><span>{t}</span></label>)}</div>
                 <label className="lbl">Remarques</label><input type="text" value={sngRemarques} onChange={e => setSngRemarques(e.target.value)} placeholder="Ex : sonde CH 14..." /></div>
@@ -215,26 +256,30 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
             )}
             <div className="g2 mb12">
               <div>
-                <label className="lbl">Fréquence <span className="req">*</span></label>
-                <select value={frequence} onChange={e => { setFrequence(e.target.value); if (errors.frequence) setErrors({...errors, frequence: ''}); }} style={errors.frequence ? { borderColor: 'var(--red)' } : {}}>
-                  <option value="">Sélectionner</option>{FREQ_OPTIONS.map(f => <option key={f}>{f}</option>)}
+                <label className="lbl">Type de fréquence <span className="req">*</span></label>
+                <select value={frequenceType} onChange={e => { setFrequenceType(e.target.value); if (errors.frequenceType) setErrors({...errors, frequenceType: ''}); }} style={errors.frequenceType ? { borderColor: 'var(--red)' } : {}}>
+                  <option value="">Sélectionner</option>
+                  <option value="HEURES">Toutes les X heures</option>
+                  <option value="PAR_JOUR">X fois par jour</option>
+                  <option value="SOS">Si besoin (SOS)</option>
+                  <option value="CONTINU">En continu</option>
                 </select>
-                {errors.frequence && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequence}</div>}
+                {errors.frequenceType && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequenceType}</div>}
               </div>
               <div>
-                <label className="lbl">Durée</label>
-                <div className="g2">
-                  <input type="text" value={duree} onChange={e => { setDuree(e.target.value); if (errors.duree) setErrors({...errors, duree: ''}); }} placeholder="Ex : 48" style={errors.duree ? { borderColor: 'var(--red)' } : {}} />
-                  <select value={dureeUnite} onChange={e => setDureeUnite(e.target.value)}>
-                    <option value="heures">heures</option>
-                    <option value="jours">jours</option>
-                    <option value="mois">mois</option>
-                  </select>
-                </div>
-                {errors.duree && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.duree}</div>}
+                <label className="lbl">Durée (jours) <span className="req">*</span></label>
+                <input type="number" min={1} value={dureeJours || ''} onChange={e => { setDureeJours(parseInt(e.target.value) || 0); if (errors.dureeJours) setErrors({...errors, dureeJours: ''}); }} placeholder="Ex : 7" style={errors.dureeJours ? { borderColor: 'var(--red)' } : {}} />
+                {errors.dureeJours && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.dureeJours}</div>}
               </div>
             </div>
-            <div className="mb12"><label className="lbl">Valeurs cibles / Seuils d'alerte</label><input type="text" value={seuil} onChange={e => setSeuil(e.target.value)} placeholder="Ex : TA > 160/90 → alerter médecin..." /></div>
+            {(frequenceType === 'HEURES' || frequenceType === 'PAR_JOUR') && (
+              <div className="mb12">
+                <label className="lbl">Valeur <span className="req">*</span></label>
+                <input type="number" min={1} value={frequenceValeur || ''} onChange={e => { setFrequenceValeur(parseInt(e.target.value) || 0); if (errors.frequenceValeur) setErrors({...errors, frequenceValeur: ''}); }} placeholder={frequenceType === 'HEURES' ? 'Ex : 8 (pour toutes les 8h)' : 'Ex : 3 (pour 3 fois par jour)'} style={errors.frequenceValeur ? { borderColor: 'var(--red)' } : {}} />
+                {errors.frequenceValeur && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{errors.frequenceValeur}</div>}
+              </div>
+            )}
+            <div className="mb12"><label className="lbl">Valeurs cibles / Seuils d&apos;alerte</label><input type="text" value={seuil} onChange={e => setSeuil(e.target.value)} placeholder="Ex : TA > 160/90 → alerter médecin..." /></div>
             <button className="badd" onClick={handleAdd} style={{ opacity: isAddValid ? 1 : 0.5 }}><span className="ms" style={{ fontSize: 17 }}>add</span> Ajouter la surveillance</button>
           </div>
 
@@ -243,7 +288,7 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
             {items.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, color: 'var(--txt3)', fontSize: 13 }}>Aucune surveillance ajoutée</div>
             ) : items.map(item => (
-              <div key={item.id} className="rxi"><div className="rxi-ic"><span className="ms">monitor_heart</span></div><div className="rxi-m"><h4>{item.parametreLabel}</h4><p>{item.frequence}{item.duree && ` · ${item.duree}`}</p>{item.seuil && <p style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 3 }}>{item.seuil}</p>}</div><button className="bdel" onClick={() => handleDelete(item.id)}><span className="ms">delete</span></button></div>
+              <div key={item.id} className="rxi"><div className="rxi-ic"><span className="ms">monitor_heart</span></div><div className="rxi-m"><h4>{item.parametreLabel}</h4><p>{getFrequenceText(item.frequenceType, item.frequenceValeur)}{item.dureeJours && ` · ${item.dureeJours} jours`}</p>{item.seuil && <p style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 3 }}>{item.seuil}</p>}</div><button className="bdel" onClick={() => handleDelete(item.id)}><span className="ms">delete</span></button></div>
             ))}
           </div>
         </div>
@@ -285,7 +330,7 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
           </div>
 
           <div className="card" style={{ padding: 8 }}>
-            <label className="lbl">Degré d'urgence <span className="req">*</span></label>
+            <label className="lbl">Degré d&apos;urgence <span className="req">*</span></label>
             <div className={`urgr ${urgenceClasses[urgence]}`} style={{ marginBottom: 8 }}>
               <div className="urgd" />
               <select className="urgs" value={urgence} onChange={e => setUrgence(e.target.value as 'n'|'u'|'tu')}>
@@ -327,6 +372,100 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
       </div>
 
       {showModal && <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}><div className="mbox"><h3>Valider — Surveillance</h3><p>La prescription sera validée et transmise.</p><div className="mbtns"><button className="bca" onClick={() => setShowModal(false)}>Annuler</button><button className="bok" onClick={handleSubmit}>Confirmer</button></div></div></div>}
+
+      {showValidationModal && validatedPrescription && (
+        <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowValidationModal(false); }}>
+          <div className="mbox" style={{ maxWidth: 600, width: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--navy)', color: '#fff', padding: '16px 20px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ms" style={{ fontSize: 24 }}>check_circle</span>
+              <div>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 800, margin: 0 }}>Prescription de surveillance validée</h3>
+                <p style={{ fontSize: 12, opacity: 0.9, margin: '4px 0 0 0' }}>{validatedPrescription.date}</p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Patient Info */}
+              <div style={{ background: 'var(--navy-lt)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="ms" style={{ fontSize: 22, color: '#fff' }}>person</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Patient</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{validatedPrescription.patient.prenom} {validatedPrescription.patient.nom}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
+                  {validatedPrescription.patient.sexe && <span><strong>Sexe:</strong> {validatedPrescription.patient.sexe === 'M' ? 'Masculin' : validatedPrescription.patient.sexe === 'F' ? 'Féminin' : validatedPrescription.patient.sexe}</span>}
+                  {validatedPrescription.patient.age && <span><strong>Âge:</strong> {validatedPrescription.patient.age} ans</span>}
+                  {validatedPrescription.patient.groupeSanguin && <span><strong>Groupe sanguin:</strong> {validatedPrescription.patient.groupeSanguin}</span>}
+                </div>
+                {validatedPrescription.patient.allergies && validatedPrescription.patient.allergies.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ms" style={{ fontSize: 14 }}>warning</span>
+                    <strong>Allergies:</strong> {validatedPrescription.patient.allergies.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescriber Info */}
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--txt2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ fontSize: 22, color: '#fff' }}>medical_services</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Prescripteur</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Dr {validatedPrescription.prescripteur.prenom} {validatedPrescription.prescripteur.nom}</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.prescripteur.service || 'Service non spécifié'}</div>
+                </div>
+              </div>
+
+              {/* Surveillance Parameters */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 12 }}>Paramètres de surveillance</div>
+                {validatedPrescription.items.map((item: SvItem, idx: number) => (
+                  <div key={idx} style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--navy-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="ms" style={{ fontSize: 18, color: 'var(--navy)' }}>monitor_heart</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>{PARAM_LABEL[item.parametre] || item.parametreLabel}</div>
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', lineHeight: 1.5 }}>
+                        Fréquence: <strong>{getFrequenceText(item.frequenceType, item.frequenceValeur)}</strong> · Durée: <strong>{item.dureeJours} jours</strong>
+                      </div>
+                      {item.seuil && <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>Seuil d&apos;alerte: {item.seuil}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Notes */}
+              {validatedPrescription.notes && (
+                <div style={{ background: 'var(--navy-lt)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--navy)', marginBottom: 6 }}>Notes complémentaires</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.notes}</div>
+                </div>
+              )}
+
+              {/* Notification Status */}
+              {validatedPrescription.notifier && (
+                <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="ms" style={{ fontSize: 20, color: '#16a34a' }}>check_circle</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>Infirmiers notifiés</div>
+                    <div style={{ fontSize: 11, color: '#15803d' }}>Notification envoyée au service clinique</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mbtns" style={{ marginTop: 20 }}>
+                <button className="bok" onClick={() => setShowValidationModal(false)}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className="tst on"><span className="ms">check_circle</span>{toast}</div>}
     </div>
   );

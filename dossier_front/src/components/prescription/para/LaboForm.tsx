@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { openSummaryWindow } from '@/lib/printPrescription';
 import { creerPrescriptionLabo } from '@/lib/prescriptionApi';
 
 const CATEGORIES = [
@@ -24,8 +23,33 @@ const CATEGORIES = [
 ];
 
 interface Props {
-  patient: { id: string; nom?: string; prenom?: string };
-  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string; poste?: string };
+  patient: { 
+    id: string; 
+    nom?: string; 
+    prenom?: string;
+    sexe?: string;
+    dateNaissance?: string;
+    allergies?: string[];
+    groupeSanguin?: string;
+  };
+  prescripteur: { id?: string; nom?: string; prenom?: string; service?: string };
+}
+
+function calcAge(dateNaissance?: string): number | null {
+  if (!dateNaissance) return null;
+  const diff = Date.now() - new Date(dateNaissance).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+interface ValidatedPrescription {
+  urgence: string;
+  alertes: string;
+  renseignements: string;
+  selected: string[];
+  notes: string;
+  patient: Props["patient"] & { age: number | null; sexeLabel?: string };
+  prescripteur: Props["prescripteur"];
+  date: string;
 }
 
 export default function LaboForm({ patient, prescripteur }: Props) {
@@ -38,6 +62,11 @@ export default function LaboForm({ patient, prescripteur }: Props) {
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validatedPrescription, setValidatedPrescription] = useState<ValidatedPrescription | null>(null);
+
+  const age = calcAge(patient?.dateNaissance);
+  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
 
   const urgenceStyle = {
     n:  { border: '#bbf7d0', bg: 'var(--inp)', dot: '#16a34a' },
@@ -49,16 +78,7 @@ export default function LaboForm({ patient, prescripteur }: Props) {
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2800); }
   const isFormValid = selected.length > 0 && renseignements.trim();
 
-  function buildLaboSummary(): string {
-    const now = new Date().toLocaleString('fr-FR');
-    let html = `<div class="card"><div class="patient">Date : ${now}</div>`;
-    html += `<div class="medicament"><span class="nom">Renseignements :</span> <span class="detail">${renseignements}</span></div>`;
-    html += `<div class="medicament"><span class="nom">Analyses :</span> <span class="detail">${selected.join(', ')}</span></div>`;
-    if (notes) html += `<div class="notice">📌 ${notes}</div>`;
-    if (alertes) html += `<div class="notice">⚠️ ${alertes}</div>`;
-    html += `</div>`;
-    return html;
-  }
+
 
   async function handleSubmit() {
     setShowModal(false);
@@ -74,7 +94,21 @@ export default function LaboForm({ patient, prescripteur }: Props) {
         analyses: selected,
         notes,
       });
-      openSummaryWindow('Prescription laboratoire', buildLaboSummary());
+      setValidatedPrescription({
+        urgence,
+        alertes,
+        renseignements,
+        selected,
+        notes,
+        patient: {
+          ...patient,
+          age,
+          sexeLabel,
+        },
+        prescripteur,
+        date: new Date().toLocaleString('fr-FR'),
+      });
+      setShowValidationModal(true);
       showToast('Prescription transmise au laboratoire');
       setSelected([]);
       setRenseignements('');
@@ -114,7 +148,7 @@ export default function LaboForm({ patient, prescripteur }: Props) {
         {/* COLONNE DROITE — sticky */}
         <div style={{ position: 'sticky', top: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="card" style={{ padding: 8 }}>
-            <label className="lbl">Degré d'urgence <span className="req">*</span></label>
+            <label className="lbl">Degré d&apos;urgence <span className="req">*</span></label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 10, background: urgenceStyle.bg, border: `1.5px solid ${urgenceStyle.border}`, marginBottom: 8 }}>
               <div style={{ width: 9, height: 9, borderRadius: '50%', background: urgenceStyle.dot, flexShrink: 0 }}></div>
               <select value={urgence} onChange={e => setUrgence(e.target.value)} style={{ flex: 1, background: 'none', border: 'none', fontSize: 14, fontWeight: 600, color: 'var(--txt)', cursor: 'pointer', outline: 'none', fontFamily: 'inherit' }}>
@@ -164,6 +198,106 @@ export default function LaboForm({ patient, prescripteur }: Props) {
             <div className="mbtns">
               <button className="bca" onClick={() => setShowModal(false)}>Annuler</button>
               <button className="bok" onClick={handleSubmit}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showValidationModal && validatedPrescription && (
+        <div className="mb op" onClick={e => { if (e.target === e.currentTarget) setShowValidationModal(false); }}>
+          <div className="mbox" style={{ maxWidth: 600, width: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--navy)', color: '#fff', padding: '16px 20px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ms" style={{ fontSize: 24 }}>check_circle</span>
+              <div>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 800, margin: 0 }}>Prescription laboratoire validée</h3>
+                <p style={{ fontSize: 12, opacity: 0.9, margin: '4px 0 0 0' }}>{validatedPrescription.date}</p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Patient Info */}
+              <div style={{ background: 'var(--navy-lt)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="ms" style={{ fontSize: 22, color: '#fff' }}>person</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Patient</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{validatedPrescription.patient.prenom} {validatedPrescription.patient.nom}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
+                  {validatedPrescription.patient.sexe && <span><strong>Sexe:</strong> {validatedPrescription.patient.sexe === 'M' ? 'Masculin' : validatedPrescription.patient.sexe === 'F' ? 'Féminin' : validatedPrescription.patient.sexe}</span>}
+                  {validatedPrescription.patient.age && <span><strong>Âge:</strong> {validatedPrescription.patient.age} ans</span>}
+                  {validatedPrescription.patient.groupeSanguin && <span><strong>Groupe sanguin:</strong> {validatedPrescription.patient.groupeSanguin}</span>}
+                </div>
+                {validatedPrescription.patient.allergies && validatedPrescription.patient.allergies.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ms" style={{ fontSize: 14 }}>warning</span>
+                    <strong>Allergies:</strong> {validatedPrescription.patient.allergies.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescriber Info */}
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--txt2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ fontSize: 22, color: '#fff' }}>medical_services</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 2 }}>Prescripteur</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Dr {validatedPrescription.prescripteur.prenom} {validatedPrescription.prescripteur.nom}</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.prescripteur.service || 'Service non spécifié'}</div>
+                </div>
+              </div>
+
+              {/* Analyses */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 12 }}>Analyses demandées</div>
+                <div style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>Renseignements cliniques</div>
+                  <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.renseignements}</div>
+                </div>
+                <div style={{ background: '#fff', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--navy-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="ms" style={{ fontSize: 18, color: 'var(--navy)' }}>science</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>Analyses</div>
+                    <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{validatedPrescription.selected.length} analyse{validatedPrescription.selected.length > 1 ? 's' : ''} sélectionnée{validatedPrescription.selected.length > 1 ? 's' : ''}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {validatedPrescription.selected.map((a: string, i: number) => (
+                        <span key={i} style={{ background: 'var(--navy-lt)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600, color: 'var(--navy)' }}>{a}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Urgence */}
+              <div style={{ background: validatedPrescription.urgence === 'n' ? '#dcfce7' : validatedPrescription.urgence === 'u' ? '#fef3c7' : '#fee2e2', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b', marginBottom: 4 }}>Degré d&apos;urgence</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b' }}>{validatedPrescription.urgence === 'n' ? 'Normal' : validatedPrescription.urgence === 'u' ? 'Urgent' : 'STAT'}</div>
+              </div>
+
+              {/* Alertes */}
+              {validatedPrescription.alertes && (
+                <div style={{ background: 'var(--red-lt)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--red)', marginBottom: 4 }}>Alertes</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.alertes}</div>
+                </div>
+              )}
+
+              {/* Notes */}
+              {validatedPrescription.notes && (
+                <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 4 }}>Notes complémentaires</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.notes}</div>
+                </div>
+              )}
+
+              <div className="mbtns" style={{ marginTop: 20 }}>
+                <button className="bok" onClick={() => setShowValidationModal(false)}>Fermer</button>
+              </div>
             </div>
           </div>
         </div>

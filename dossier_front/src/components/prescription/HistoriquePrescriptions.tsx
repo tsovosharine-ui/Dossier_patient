@@ -1,441 +1,644 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
+"use client";
+import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 
-interface HistoriqueEntry {
-  id: string;
-  action: string;
-  module: string;
-  anciennesValeurs: any;
-  nouvellesValeurs: any;
-  utilisateur: string;
-  commentaire: string;
-  dateAction: string;
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-const ACTION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  creation:     { label: 'Création',     color: '#16a34a', bg: '#dcfce7' },
-  modification: { label: 'Modification', color: '#1d4ed8', bg: '#dbeafe' },
-  validation:   { label: 'Validation',   color: '#7c3aed', bg: '#ede9fe' },
-  suppression:  { label: 'Suppression',  color: '#dc2626', bg: '#fee2e2' },
-};
-
-const TYPE_FILTERS = [
-  { key: 'tous',           label: 'Tous',               icon: <IconAll /> },
-  { key: 'medicament',     label: 'Médicamenteuse',     icon: <IconMed /> },
-  { key: 'non_medicament', label: 'Non médicamenteuse', icon: <IconNonMed /> },
-  { key: 'surveillance',   label: 'Surveillance',       icon: <IconSurv /> },
-  { key: 'transfusion',    label: 'Transfusion',        icon: <IconTrans /> },
-  { key: 'bloc',           label: 'Bloc opératoire',    icon: <IconBloc /> },
-  { key: 'paraclinique',   label: 'Para-clinique',      icon: <IconPara /> },
+const FILTRES = [
+  { id: 'all',   label: 'Tout',             icon: 'list' },
+  { id: 'med',   label: 'Médicamenteuse',   icon: 'medication' },
+  { id: 'nm',    label: 'Non Médicamenteuse', icon: 'self_care' },
+  { id: 'surv',  label: 'Surveillance',     icon: 'monitor_heart' },
+  { id: 'trans', label: 'Transfusion',      icon: 'bloodtype' },
+  { id: 'labo',  label: 'Laboratoire',      icon: 'science' },
+  { id: 'imag',  label: 'Imagerie',         icon: 'radiology' },
+  { id: 'eeg',   label: 'EEG',              icon: 'neurology' },
+  { id: 'kine',  label: 'Kinésithérapie',   icon: 'exercise' },
+  { id: 'endo',  label: 'Endoscopie',       icon: 'visibility' },
+  { id: 'dial',  label: 'Dialyse',          icon: 'water_full' },
+  { id: 'ana',   label: 'Anapath',          icon: 'biotech' },
+  { id: 'bloc',  label: 'Bloc Opératoire',  icon: 'medical_services' },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  medicament:     'Médicamenteuse',
-  non_medicament: 'Non médicamenteuse',
-  surveillance:   'Surveillance',
-  transfusion:    'Transfusion',
-  bloc:           'Bloc opératoire',
-  paraclinique:   'Para-clinique',
+const TYPE_COLORS: Record<string, string> = {
+  med:   '#3b82f6', nm:   '#8b5cf6', surv:  '#10b981',
+  trans: '#ef4444', labo: '#f59e0b', imag:  '#06b6d4',
+  eeg:   '#6366f1', kine: '#84cc16', endo:  '#f97316',
+  dial:  '#14b8a6', ana:  '#ec4899', bloc:  '#1e40af',
 };
 
-const FIELD_LABELS: Record<string, string> = {
-  type: 'Type', statut: 'Statut', valide: 'Validé',
-  patientId: 'Patient ID', prescripteur: 'Prescripteur',
-  medicaments: 'Médicaments', remarques: 'Remarques',
-  notifierInfirmier: 'Notifier infirmier',
-  createdAt: 'Créé le', updatedAt: 'Modifié le',
+const ENDPOINTS: Record<string, string> = {
+  med:   'prescriptions/medicale',
+  nm:    'prescriptions/non-medicale',
+  surv:  'prescriptions/surveillance',
+  trans: 'prescriptions/transfusion',
+  labo:  'prescriptions/labo',
+  imag:  'prescriptions/imagerie',
+  eeg:   'prescriptions/eeg',
+  kine:  'prescriptions/kine',
+  endo:  'prescriptions/endoscopie',
+  dial:  'prescriptions/dialyse',
+  ana:   'prescriptions/anapath',
+  bloc:  'prescriptions/bloc',
 };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EXCLUDED_KEYS = ['id', 'patientId', '__v', 'prescriptionId'];
+interface PrescriptionItem {
+  _type: string;
+  createdAt?: string;
+  date?: string;
+  statut?: string;
+  remarque?: string;
+  remarques?: string;
+  instructions?: string;
+  description?: string;
+  nom?: string;
+  medicament?: string;
+  type?: string;
+  parametre?: string;
+  produit?: string;
+  groupe?: string;
+  examen?: string;
+  analyse?: string;
+  seance?: string;
+  intervention?: string;
+  urgence?: string;
+  alertes?: string;
+  renseignements?: string;
+  notes?: string;
+  notifierInfirmier?: boolean;
+  medicaments?: PrescriptionItem[];
+  items?: PrescriptionItem[];
+  parametres?: PrescriptionItem[];
+  analyses?: string[];
+  examens?: Record<string, string[]>;
+  typeEEG?: string;
+  typeKine?: string;
+  diagnostic?: string;
+  contreIndications?: string[];
+  objectifs?: string;
+  typeExamen?: string;
+  typeDialyse?: string;
+  data?: Record<string, unknown>;
+  libelle?: string;
+  risqueHemorragique?: string;
+  typeChirurgie?: string;
+  chirurgien?: string;
+  consignes?: string;
+  dateIntervention?: string;
+  atcdTransfusion?: boolean;
+  incident?: string;
+  groupage?: string;
+  hb?: string;
+  plaquettes?: string;
+  quantite?: string;
+  datePrevue?: string;
+  typeLabel?: string;
+  duree?: string;
+  frequence?: string;
+  dateDebut?: string;
+  heureDebut?: string;
+  seuil?: string;
+  dose?: string;
+  voie?: string;
+}
 
-function getTypeFromEntry(entry: HistoriqueEntry): string {
-  const values = entry.nouvellesValeurs || entry.anciennesValeurs || {};
-  let parsed = values;
-  if (typeof values === 'string') {
-    try { parsed = JSON.parse(values); } catch { parsed = {}; }
+interface Props {
+  patient?: { id?: string, idPermanent?: string };
+  prescripteur?: { id?: string };
+}
+
+export default function HistoriqueForm({ patient }: Props) {
+  const [filtre, setFiltre] = useState('all');
+  const [items, setItems] = useState<PrescriptionItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedItem, setSelectedItem] = useState<PrescriptionItem | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    async function fetchHistorique() {
+      setLoading(true);
+      setError('');
+      try {
+        const patientId = patient?.id;
+        if (!patientId) { setError('ID patient manquant'); setLoading(false); return; }
+
+        const response = await api.get(`/patients/${patientId}/prescriptions`);
+        const allPrescriptions = Array.isArray(response.data) ? response.data : [];
+
+        // Filtrer par type si nécessaire
+        const filtered = filtre === 'all' 
+          ? allPrescriptions 
+          : allPrescriptions.filter((p: any) => {
+              const typeMap: Record<string, string> = {
+                'medicament': 'med',
+                'non_medicament': 'nm',
+                'surveillance': 'surv',
+                'transfusion': 'trans',
+                'paraclinique': 'labo',
+                'bloc': 'bloc',
+              };
+              const normalizedType = typeMap[p.type] || p.type;
+              return normalizedType === filtre;
+            });
+
+        // Parser le contenu JSON et ajouter le type
+        const results = filtered.map((p: any) => {
+          let contenu: any = {};
+          try { contenu = JSON.parse(p.contenu || '{}'); } catch {}
+          return {
+            ...p,
+            ...contenu,
+            _type: p.type,
+            createdAt: p.createdAt,
+          };
+        });
+
+        // Trier par date décroissante
+        results.sort((a: any, b: any) => {
+          const da = new Date(a.createdAt || a.date || 0).getTime();
+          const db = new Date(b.createdAt || b.date || 0).getTime();
+          return db - da;
+        });
+
+        setItems(results);
+      } catch (e: unknown) {
+        setError('Erreur lors du chargement : ' + (e instanceof Error ? e.message : String(e)));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchHistorique();
+  }, [filtre, patient?.id]);
+
+  function formatDate(dateStr?: string) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
   }
-  return parsed?.type || '';
-}
 
-// ── ICÔNES SVG ──────────────────────────────────────────────────────────────
+  function getTypeLabel(type: string) {
+    return FILTRES.find(f => f.id === type)?.label || type;
+  }
 
-function IconAll() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-      <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-    </svg>
-  );
-}
-function IconMed() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
-      <line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-    </svg>
-  );
-}
-function IconNonMed() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-    </svg>
-  );
-}
-function IconSurv() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-    </svg>
-  );
-}
-function IconTrans() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a5 5 0 0 1 5 5c0 5-5 13-5 13S7 12 7 7a5 5 0 0 1 5-5z"/>
-      <circle cx="12" cy="7" r="2"/>
-    </svg>
-  );
-}
-function IconBloc() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-      <polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  );
-}
-function IconPara() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
-    </svg>
-  );
-}
+  function getResume(item: PrescriptionItem, type: string) {
+    switch (type) {
+      case 'med':   return item.medicament || item.nom || 'Médicament';
+      case 'nm':    return item.type || item.description || 'Non médicamenteuse';
+      case 'surv':  return item.parametre || item.type || 'Surveillance';
+      case 'trans': return item.produit || item.groupe || 'Transfusion';
+      case 'labo':  return item.examen || item.analyse || 'Analyse laboratoire';
+      case 'imag':  return item.examen || item.type || 'Imagerie';
+      case 'eeg':   return item.type || 'EEG';
+      case 'kine':  return item.type || item.seance || 'Kinésithérapie';
+      case 'endo':  return item.type || 'Endoscopie';
+      case 'dial':  return item.type || 'Dialyse';
+      case 'ana':   return item.examen || item.type || 'Anapath';
+      case 'bloc':  return item.intervention || item.type || 'Bloc opératoire';
+      default:      return item.description || item.nom || '—';
+    }
+  }
 
-// ── COMPOSANTS INTERNES ─────────────────────────────────────────────────────
+  function handleItemClick(item: PrescriptionItem) {
+    setSelectedItem(item);
+    setShowModal(true);
+  }
 
-function MedicamentsList({ items }: { items: any[] }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-      {items.map((med: any, i: number) => (
-        <div key={i} style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px', borderLeft: '3px solid #1d4ed8' }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>{med.nom || '—'}</div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {med.dose      && <span style={{ fontSize: '11px', color: '#475569' }}>Dose : <strong>{med.dose}</strong></span>}
-            {med.quantite  && <span style={{ fontSize: '11px', color: '#475569' }}>Qté : <strong>{med.quantite}</strong></span>}
-            {med.frequence && <span style={{ fontSize: '11px', color: '#475569' }}>Fréq : <strong>{med.frequence}</strong></span>}
-            {med.duree     && <span style={{ fontSize: '11px', color: '#475569' }}>Durée : <strong>{med.duree}</strong></span>}
-            {med.voie && med.voie !== '' && <span style={{ fontSize: '11px', color: '#475569' }}>Voie : <strong>{med.voie}</strong></span>}
+  function renderDetailField(label: string, value: unknown) {
+    if (value === undefined || value === null || value === '') return null;
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt3)' }}>{label}: </span>
+        <span style={{ fontSize: 12, color: 'var(--txt)' }}>{String(value)}</span>
+      </div>
+    );
+  }
+
+  function getUrgenceLabel(u?: string) {
+    if (!u) return '';
+    switch (u.toLowerCase()) {
+      case 'n': return 'Normale';
+      case 'u': return 'Urgente';
+      case 'tu': return 'STAT (Urgence vitale)';
+      default: return u;
+    }
+  }
+
+  function renderPrescriptionDetails(item: PrescriptionItem, type: string) {
+    const color = TYPE_COLORS[type] || 'var(--navy)';
+
+    switch (type) {
+      case 'med':
+        return (
+          <div>
+            {item.remarques && renderDetailField('Remarques générales', item.remarques)}
+            {item.notifierInfirmier !== undefined && renderDetailField('Notifier infirmier', item.notifierInfirmier ? 'Oui' : 'Non')}
+            {item.medicaments && Array.isArray(item.medicaments) && item.medicaments.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Médicaments prescrits:</div>
+                {item.medicaments.map((med: PrescriptionItem, idx: number) => (
+                  <div key={idx} style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6, marginBottom: 8 }}>
+                    {renderDetailField('Nom', med.nom)}
+                    {renderDetailField('Dose', med.dose)}
+                    {renderDetailField('Quantité', med.quantite)}
+                    {renderDetailField('Voie', med.voie)}
+                    {renderDetailField('Fréquence', med.frequence)}
+                    {renderDetailField('Durée', med.duree)}
+                    {renderDetailField('Date de début', med.dateDebut)}
+                    {renderDetailField('Heure de début', med.heureDebut)}
+                    {renderDetailField('Instructions', med.instructions)}
+                    {renderDetailField('Remarques', med.remarques)}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+        );
 
-function ValeurSection({ title, data, color, bg, border }: {
-  title: string; data: any; color: string; bg: string; border: string;
-}) {
-  if (!data) return null;
-  let parsed = data;
-  if (typeof data === 'string') {
-    try { parsed = JSON.parse(data); } catch { return null; }
+      case 'nm':
+        return (
+          <div>
+            {item.notifierInfirmier !== undefined && renderDetailField('Notifier infirmier', item.notifierInfirmier ? 'Oui' : 'Non')}
+            {item.items && Array.isArray(item.items) && item.items.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Prescriptions:</div>
+                {item.items.map((itm: PrescriptionItem, idx: number) => (
+                  <div key={idx} style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6, marginBottom: 8 }}>
+                    {renderDetailField('Type', itm.typeLabel || itm.type)}
+                    {renderDetailField('Description', itm.description)}
+                    {renderDetailField('Durée', itm.duree)}
+                    {renderDetailField('Fréquence', itm.frequence)}
+                    {renderDetailField('Date de début', itm.dateDebut)}
+                    {renderDetailField('Heure de début', itm.heureDebut)}
+                    {renderDetailField('Instructions', itm.instructions)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'surv':
+        return (
+          <div>
+            {renderDetailField('Notes', item.notes)}
+            {item.notifierInfirmier !== undefined && renderDetailField('Notifier infirmier', item.notifierInfirmier ? 'Oui' : 'Non')}
+            {item.parametres && Array.isArray(item.parametres) && item.parametres.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Paramètres à surveiller:</div>
+                {item.parametres.map((param: PrescriptionItem, idx: number) => (
+                  <div key={idx} style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6, marginBottom: 8 }}>
+                    {renderDetailField('Paramètre', param.parametre)}
+                    {renderDetailField('Fréquence', param.frequence)}
+                    {renderDetailField('Durée', param.duree)}
+                    {renderDetailField('Seuil', param.seuil)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'trans':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField('Antécédents transfusionnels', item.atcdTransfusion ? 'Oui' : 'Non')}
+            {renderDetailField('Incidents précédents', item.incident)}
+            {renderDetailField('Groupage sanguin', item.groupage)}
+            {renderDetailField('Hémoglobine', item.hb)}
+            {renderDetailField('Produit', item.produit)}
+            {renderDetailField('Plaquettes', item.plaquettes)}
+            {renderDetailField('Quantité', item.quantite)}
+            {renderDetailField('Date prévue', item.datePrevue)}
+            {renderDetailField('Notes', item.notes)}
+          </div>
+        );
+
+      case 'labo':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {item.analyses && Array.isArray(item.analyses) && item.analyses.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Analyses demandées:</div>
+                <div style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6 }}>
+                  {item.analyses.map((analyse: string, idx: number) => (
+                    <div key={idx} style={{ fontSize: 12, marginBottom: 4 }}>• {analyse}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {renderDetailField('Notes', item.notes)}
+          </div>
+        );
+
+      case 'imag':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {item.examens && typeof item.examens === 'object' && Object.keys(item.examens).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Examens demandés:</div>
+                {Object.entries(item.examens).map(([type, exams]: [string, string[]]) => (
+                  <div key={type} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt3)' }}>{type}:</div>
+                    {Array.isArray(exams) && exams.map((exam: string, idx: number) => (
+                      <div key={idx} style={{ fontSize: 12, marginLeft: 8 }}>• {exam}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {renderDetailField('Notes', item.notes)}
+          </div>
+        );
+
+      case 'eeg':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField("Type d'EEG", item.typeEEG)}
+            {renderDetailField('Remarques', item.remarques)}
+          </div>
+        );
+
+      case 'kine':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField('Type de kinésithérapie', item.typeKine)}
+            {renderDetailField('Diagnostic', item.diagnostic)}
+            {item.contreIndications && Array.isArray(item.contreIndications) && item.contreIndications.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt3)' }}>Contre-indications:</div>
+                {item.contreIndications.map((ci: string, idx: number) => (
+                  <div key={idx} style={{ fontSize: 12, marginLeft: 8 }}>• {ci}</div>
+                ))}
+              </div>
+            )}
+            {renderDetailField('Objectifs', item.objectifs)}
+            {renderDetailField('Remarques', item.remarques)}
+          </div>
+        );
+
+      case 'endo':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField("Type d'examen", item.typeExamen)}
+            {renderDetailField('Remarques', item.remarques)}
+          </div>
+        );
+
+      case 'dial':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField('Type de dialyse', item.typeDialyse)}
+            {renderDetailField('Remarques', item.remarques)}
+          </div>
+        );
+
+      case 'ana':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField("Type d'examen", item.typeExamen)}
+            {item.data && typeof item.data === 'object' && Object.keys(item.data).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Détails:</div>
+                {Object.entries(item.data).map(([key, value]: [string, unknown]) => (
+                  renderDetailField(key.charAt(0).toUpperCase() + key.slice(1), value)
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'bloc':
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Libellé intervention', item.libelle)}
+            {renderDetailField('Risque hémorragique', item.risqueHemorragique)}
+            {renderDetailField('Type de chirurgie', item.typeChirurgie)}
+            {renderDetailField('Chirurgien', item.chirurgien)}
+            {renderDetailField('Consignes', item.consignes)}
+            {renderDetailField('Date intervention', item.dateIntervention)}
+          </div>
+        );
+
+      default:
+        return (
+          <div>
+            {renderDetailField('Description', item.description)}
+            {renderDetailField('Remarques', item.remarques)}
+          </div>
+        );
+    }
   }
-  if (typeof parsed !== 'object') return null;
-  const entries = Object.entries(parsed).filter(([k]) => !EXCLUDED_KEYS.includes(k));
-  if (entries.length === 0) return null;
 
   return (
-    <div style={{ marginTop: '10px' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
-        {title}
+    <div>
+      {/* TITRE */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
+          Historique des prescriptions
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 4 }}>
+          {items.length} prescription{items.length > 1 ? 's' : ''} trouvée{items.length > 1 ? 's' : ''}
+        </p>
       </div>
-      <div style={{ backgroundColor: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {entries.map(([key, val]) => {
-          const label = FIELD_LABELS[key] || key;
 
-          if (key === 'contenu') {
-            let v = val;
-            if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
-            if (v && typeof v === 'object') {
-              const cv = v as any;
-              if (Array.isArray(cv.medicaments)) {
-                return (
-                  <div key={key}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Médicaments</span>
-                    <MedicamentsList items={cv.medicaments} />
-                    {cv.remarques && cv.remarques !== '' && (
-                      <div style={{ marginTop: '6px', fontSize: '11px', color: '#64748b' }}>Remarques : {cv.remarques}</div>
-                    )}
-                  </div>
-                );
-              }
-              if (Array.isArray(cv.items)) {
-                return (
-                  <div key={key}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Détails</span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                      {cv.items.map((item: any, i: number) => (
-                        <div key={i} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', borderLeft: '3px solid #1d4ed8' }}>
-                          {(item.typeLabel || item.type || item.nom) && (
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
-                              {item.typeLabel || item.nom || item.type}
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            {item.description && <span style={{ fontSize: '11px', color: '#475569' }}>Description : <strong>{item.description}</strong></span>}
-                            {item.duree       && <span style={{ fontSize: '11px', color: '#475569' }}>Durée : <strong>{item.duree}</strong></span>}
-                            {item.frequence   && <span style={{ fontSize: '11px', color: '#475569' }}>Fréq : <strong>{item.frequence}</strong></span>}
-                            {item.dose        && <span style={{ fontSize: '11px', color: '#475569' }}>Dose : <strong>{item.dose}</strong></span>}
-                            {item.quantite    && <span style={{ fontSize: '11px', color: '#475569' }}>Qté : <strong>{item.quantite}</strong></span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }
-            }
-          }
-
-          if (key === 'prescripteur' && typeof val === 'string' && UUID_RE.test(val)) {
-            return (
-              <div key={key} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', minWidth: '130px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prescripteur</span>
-                <span style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>Dr. Jean Pierre</span>
-              </div>
-            );
-          }
-
-          if (typeof val === 'boolean') {
-            return (
-              <div key={key} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', minWidth: '130px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-                <span style={{ fontSize: '12px', color, fontWeight: 500 }}>{val ? 'Oui' : 'Non'}</span>
-              </div>
-            );
-          }
-
-          if ((key === 'createdAt' || key === 'updatedAt') && typeof val === 'string') {
-            return (
-              <div key={key} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', minWidth: '130px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-                <span style={{ fontSize: '12px', color, fontWeight: 500 }}>{new Date(val as string).toLocaleString('fr-FR')}</span>
-              </div>
-            );
-          }
-
-          if (!val || val === '') return null;
-
+      {/* FILTRES */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+        {FILTRES.map(f => {
+          const active = filtre === f.id;
           return (
-            <div key={key} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', minWidth: '130px', flexShrink: 0, paddingTop: '1px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {label}
-              </span>
-              <span style={{ fontSize: '12px', color, fontWeight: 500, lineHeight: 1.5, wordBreak: 'break-word' }}>
-                {String(val)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── COMPOSANT PRINCIPAL ─────────────────────────────────────────────────────
-
-export default function HistoriquePrescriptions({ patientId }: { patientId: string }) {
-  const [entries, setEntries] = useState<HistoriqueEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [filtre, setFiltre] = useState<string>('tous');
-
-  useEffect(() => { fetchHistorique(); }, [patientId]);
-
-  const fetchHistorique = async () => {
-    try {
-      const res = await api.get(`/patients/${patientId}/historique`);
-      const prescriptions = res.data.filter((e: HistoriqueEntry) => e.module === 'Prescription');
-      setEntries(prescriptions);
-    } catch { } finally { setLoading(false); }
-  };
-
-  const filtered = filtre === 'tous'
-    ? entries
-    : entries.filter(e => getTypeFromEntry(e) === filtre);
-
-  const countByType = (type: string) =>
-    type === 'tous'
-      ? entries.length
-      : entries.filter(e => getTypeFromEntry(e) === type).length;
-
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) +
-    ' à ' + new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
-  if (loading) return (
-    <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontFamily: "'Inter', sans-serif", fontSize: '14px' }}>
-      Chargement...
-    </div>
-  );
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: "'Inter', sans-serif" }}>
-
-      {/* En-tête */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
-            Historique des prescriptions
-          </h3>
-          <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0 0' }}>
-            {entries.length} action{entries.length > 1 ? 's' : ''} enregistrée{entries.length > 1 ? 's' : ''}
-          </p>
-        </div>
-        <button
-          onClick={fetchHistorique}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            backgroundColor: '#f8fafc', color: '#475569',
-            border: '1px solid #e2e8f0', borderRadius: '8px',
-            padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-            cursor: 'pointer', fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-          Actualiser
-        </button>
-      </div>
-
-      {/* Filtres */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {TYPE_FILTERS.map(f => {
-          const count = countByType(f.key);
-          const isActive = filtre === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setFiltre(f.key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 12px', fontSize: '12px', fontWeight: 500,
-                borderRadius: '8px', border: '1px solid',
-                cursor: 'pointer', fontFamily: "'Inter', sans-serif",
-                borderColor: isActive ? '#1d4ed8' : '#e2e8f0',
-                backgroundColor: isActive ? '#1d4ed8' : '#ffffff',
-                color: isActive ? '#ffffff' : '#64748b',
-                transition: 'all 0.15s',
-                opacity: count === 0 && f.key !== 'tous' ? 0.4 : 1,
-              }}
-            >
-              <span style={{ color: isActive ? '#ffffff' : '#64748b' }}>{f.icon}</span>
+            <button key={f.id} onClick={() => setFiltre(f.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '5px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+              border: active ? 'none' : '1px solid var(--bdr)',
+              background: active ? (f.id === 'all' ? 'var(--navy)' : TYPE_COLORS[f.id] || 'var(--navy)') : 'var(--card)',
+              color: active ? '#fff' : 'var(--txt2)',
+              cursor: 'pointer', transition: 'all .15s',
+            }}>
+              <span className="ms" style={{ fontSize: 14 }}>{f.icon}</span>
               {f.label}
-              {count > 0 && (
-                <span style={{
-                  fontSize: '10px', fontWeight: 700,
-                  backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
-                  color: isActive ? '#ffffff' : '#64748b',
-                  borderRadius: '10px', padding: '1px 6px', minWidth: '18px', textAlign: 'center',
-                }}>
-                  {count}
-                </span>
-              )}
             </button>
           );
         })}
       </div>
 
-      {/* Résultats vides */}
-      {filtered.length === 0 && (
-        <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8' }}>
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '10px' }}>
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-          <p style={{ fontSize: '14px', fontWeight: 500, margin: '0 0 4px 0' }}>
-            {entries.length === 0 ? 'Aucune prescription dans l\'historique' : `Aucune prescription de type "${TYPE_LABELS[filtre] || filtre}"`}
-          </p>
-          <p style={{ fontSize: '12px', margin: 0 }}>
-            {entries.length === 0 ? 'Les prescriptions créées seront tracées ici' : 'Essayez un autre filtre'}
-          </p>
+      {/* CONTENU */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--txt3)' }}>
+          <span className="ms" style={{ fontSize: 36, display: 'block', marginBottom: 8 }}>hourglass_top</span>
+          Chargement...
+        </div>
+      ) : error ? (
+        <div style={{ background: 'var(--red-lt)', border: '1px solid var(--red-bdr)', borderRadius: 8, padding: 16, color: 'var(--red)', fontSize: 13 }}>
+          {error}
+        </div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--txt3)' }}>
+          <span className="ms" style={{ fontSize: 36, display: 'block', marginBottom: 8 }}>inbox</span>
+          Aucune prescription trouvée
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((item, i) => {
+            const color = TYPE_COLORS[item._type] || 'var(--navy)';
+            return (
+              <div key={i} className="card" style={{
+                padding: '12px 16px', borderLeft: `4px solid ${color}`,
+                display: 'flex', alignItems: 'flex-start', gap: 12,
+                cursor: 'pointer',
+              }} onClick={() => handleItemClick(item)}>
+                {/* Icône type */}
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                  background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span className="ms" style={{ fontSize: 18, color }}>{FILTRES.find(f => f.id === item._type)?.icon || 'description'}</span>
+                </div>
+
+                {/* Infos */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                      borderRadius: 10, background: color + '20', color,
+                    }}>
+                      {getTypeLabel(item._type)}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--txt3)' }}>
+                      {formatDate(item.createdAt || item.date)}
+                    </span>
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)', marginTop: 4 }}>
+                    {getResume(item, item._type)}
+                  </div>
+                  {item.remarque || item.remarques || item.instructions ? (
+                    <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 3 }}>
+                      {item.remarque || item.remarques || item.instructions}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Statut */}
+                {item.statut && (
+                  <div style={{
+                    fontSize: 10, fontWeight: 700, padding: '3px 8px',
+                    borderRadius: 10, flexShrink: 0,
+                    background: item.statut === 'validé' ? '#d1fae5' : '#fef3c7',
+                    color: item.statut === 'validé' ? '#065f46' : '#92400e',
+                  }}>
+                    {item.statut}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Liste */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filtered.map(entry => {
-          const cfg = ACTION_CONFIG[entry.action] || ACTION_CONFIG.creation;
-          const isExpanded = expanded === entry.id;
-          const hasDetails = entry.anciennesValeurs || entry.nouvellesValeurs;
-          const typeEntry = getTypeFromEntry(entry);
-
-          return (
-            <div key={entry.id} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
-
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  {/* Badge action */}
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', backgroundColor: cfg.bg, color: cfg.color }}>
-                    {cfg.label}
+      {/* MODAL DE DÉTAILS */}
+      {showModal && selectedItem && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => setShowModal(false)}>
+          <div className="card" style={{
+            maxWidth: 600, width: '90%', maxHeight: '80vh', overflowY: 'auto',
+            padding: 24, borderRadius: 12,
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 8,
+                  background: (TYPE_COLORS[selectedItem._type] || 'var(--navy)') + '20',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span className="ms" style={{
+                    fontSize: 20, color: TYPE_COLORS[selectedItem._type] || 'var(--navy)'
+                  }}>
+                    {FILTRES.find(f => f.id === selectedItem._type)?.icon || 'description'}
                   </span>
-                  {/* Badge type */}
-                  {typeEntry && TYPE_LABELS[typeEntry] && (
-                    <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', backgroundColor: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
-                      {TYPE_LABELS[typeEntry]}
-                    </span>
-                  )}
                 </div>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>{formatDate(entry.dateAction)}</span>
-              </div>
-
-              {/* Commentaire */}
-              {entry.commentaire && (
-                <p style={{ fontSize: '13px', color: '#475569', margin: '0 0 6px 0', lineHeight: 1.5 }}>{entry.commentaire}</p>
-              )}
-
-              {/* Utilisateur */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: hasDetails ? '8px' : 0 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                </svg>
-                <span style={{ fontSize: '12px', color: '#64748b' }}>{entry.utilisateur || 'Système'}</span>
-              </div>
-
-              {/* Détails dépliables */}
-              {hasDetails && (
                 <div>
-                  <button
-                    onClick={() => setExpanded(isExpanded ? null : entry.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: "'Inter', sans-serif", fontWeight: 500 }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                    {isExpanded ? 'Masquer les détails' : 'Voir les détails'}
-                  </button>
-
-                  {isExpanded && (
-                    <div>
-                      <ValeurSection title="Nouvelles valeurs" data={entry.nouvellesValeurs} color="#15803d" bg="#f0fdf4" border="#bbf7d0" />
-                      <ValeurSection title="Anciennes valeurs" data={entry.anciennesValeurs} color="#b91c1c" bg="#fef2f2" border="#fecaca" />
-                    </div>
-                  )}
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>
+                    {getTypeLabel(selectedItem._type)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--txt3)' }}>
+                    {formatDate(selectedItem.createdAt || selectedItem.date)}
+                  </div>
                 </div>
-              )}
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 24, color: 'var(--txt3)', padding: 4,
+                }}
+              >
+                ×
+              </button>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Status */}
+            {selectedItem.statut && (
+              <div style={{
+                display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '4px 10px',
+                borderRadius: 10, marginBottom: 16,
+                background: selectedItem.statut === 'validé' ? '#d1fae5' : '#fef3c7',
+                color: selectedItem.statut === 'validé' ? '#065f46' : '#92400e',
+              }}>
+                Statut: {selectedItem.statut}
+              </div>
+            )}
+
+            {/* Détails */}
+            <div style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.6 }}>
+              {renderPrescriptionDetails(selectedItem, selectedItem._type)}
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--bdr)' }}>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  width: '100%', padding: 10, borderRadius: 8,
+                  background: 'var(--navy)', color: '#fff',
+                  border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
