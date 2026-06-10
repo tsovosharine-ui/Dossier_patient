@@ -7,9 +7,45 @@ async function bootstrap() {
   app.enableCors();
 
   const config = new DocumentBuilder()
-    .setTitle('API Dossier Patient')
-    .setDescription('Documentation des endpoints')
+    .setTitle('Dossier Patient API')
+    .setDescription(`
+      API de gestion des dossiers patients et prescriptions médicales.
+      
+      ## Fonctionnalités principales
+      - Gestion des patients
+      - Prescriptions médicales (médicaments, laboratoire, imagerie, dialyse, endoscopie, etc.)
+      - Notifications et intégrations externes
+      - Planning des médicaments
+      
+      ## Authentification
+      Les endpoints nécessitent un token d'authentification dans le header Authorization.
+      
+      ## Variables d'environnement requises
+      - DATABASE_URL: URL de connexion PostgreSQL
+      - PHARMACY_API_URL: URL de l'API pharmacie (optionnel)
+      - LABO_API_URL: URL de l'API laboratoire (optionnel)
+      - IMAGERIE_API_URL: URL de l'API imagerie (optionnel)
+      - DIALYSE_API_URL: URL de l'API dialyse (optionnel)
+      - ENDOSCOPIE_API_URL: URL de l'API endoscopie (optionnel)
+      - RENDER_WEBHOOK_URL: URL du webhook Render pour notifications (optionnel)
+    `)
     .setVersion('1.0')
+    .addTag('Patients', 'Gestion des patients')
+    .addTag('Prescriptions Médicales', 'Prescriptions de médicaments')
+    .addTag('Prescriptions Labo', 'Prescriptions de laboratoire')
+    .addTag('Prescriptions Imagerie', 'Prescriptions d\'imagerie')
+    .addTag('Prescriptions Non-Médicales', 'Prescriptions non médicales')
+    .addTag('Prescriptions Surveillance', 'Prescriptions de surveillance')
+    .addTag('Prescriptions Transfusion', 'Prescriptions de transfusion')
+    .addTag('Prescriptions Bloc', 'Prescriptions de bloc opératoire')
+    .addTag('Prescriptions Anapath', 'Prescriptions d\'anatomopathologie')
+    .addTag('Prescriptions EEG', 'Prescriptions EEG')
+    .addTag('Prescriptions Kinésithérapie', 'Prescriptions de kinésithérapie')
+    .addTag('Prescriptions Dialyse', 'Prescriptions de dialyse')
+    .addTag('Prescriptions Endoscopie', 'Prescriptions d\'endoscopie')
+    .addTag('Planning', 'Planning des prises médicamenteuses')
+    .addTag('Notifications', 'Gestion des notifications')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
