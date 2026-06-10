@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { DialyseService } from '../services/dialyse.service';
+import { CreatePrescriptionDialyseDto } from '../dto/create-prescription-dialyse.dto';
 
 @ApiTags('Prescriptions Dialyse')
 @Controller('prescriptions/dialyse')
@@ -10,7 +11,7 @@ export class DialyseController {
   @Post()
   @ApiOperation({ summary: 'Créer une prescription de dialyse' })
   @ApiResponse({ status: 201, description: 'Prescription de dialyse créée avec succès' })
-  create(@Body() dto: any) {
+  create(@Body() dto: CreatePrescriptionDialyseDto) {
     return this.service.create(dto.prescripteurId, dto);
   }
 

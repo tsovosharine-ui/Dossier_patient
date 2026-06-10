@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { KineService } from '../services/kine.service';
+import { CreatePrescriptionKineDto } from '../dto/create-prescription-kine.dto';
 
 @ApiTags('Prescriptions Kinésithérapie')
 @Controller('prescriptions/kine')
@@ -10,7 +11,7 @@ export class KineController {
   @Post()
   @ApiOperation({ summary: 'Créer une prescription de kinésithérapie' })
   @ApiResponse({ status: 201, description: 'Prescription de kinésithérapie créée avec succès' })
-  create(@Body() dto: any) {
+  create(@Body() dto: CreatePrescriptionKineDto) {
     return this.service.create(dto.prescripteurId, dto);
   }
 

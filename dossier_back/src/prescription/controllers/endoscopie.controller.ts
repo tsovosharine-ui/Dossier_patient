@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { EndoscopieService } from '../services/endoscopie.service';
+import { CreatePrescriptionEndoscopieDto } from '../dto/create-prescription-endoscopie.dto';
 
 @ApiTags('Prescriptions Endoscopie')
 @Controller('prescriptions/endoscopie')
@@ -10,7 +11,7 @@ export class EndoscopieController {
   @Post()
   @ApiOperation({ summary: 'Créer une prescription d\'endoscopie' })
   @ApiResponse({ status: 201, description: 'Prescription d\'endoscopie créée avec succès' })
-  create(@Body() dto: any) {
+  create(@Body() dto: CreatePrescriptionEndoscopieDto) {
     return this.service.create(dto.prescripteurId, dto);
   }
 

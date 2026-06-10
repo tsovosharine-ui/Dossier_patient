@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { BlocService } from '../services/bloc.service';
+import { CreatePrescriptionBlocDto } from '../dto/create-prescription-bloc.dto';
 
 @ApiTags('Prescriptions Bloc')
 @Controller('prescriptions/bloc')
@@ -10,7 +11,7 @@ export class BlocController {
   @Post()
   @ApiOperation({ summary: 'Créer une prescription de bloc' })
   @ApiResponse({ status: 201, description: 'Prescription de bloc créée avec succès' })
-  create(@Body() dto: any) {
+  create(@Body() dto: CreatePrescriptionBlocDto) {
     return this.service.create(dto.prescripteurId, dto);
   }
 
