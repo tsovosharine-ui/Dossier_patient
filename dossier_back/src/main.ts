@@ -13,6 +13,14 @@ async function bootstrap() {
       
       ## Fonctionnalités principales
       - Gestion des patients
+      - Observations médicales
+      - Diagnostics
+      - Suivi médical
+      - Demandes d'avis
+      - Comptes rendus opératoires
+      - Historique médical
+      - Résultats paracliniques
+      - Sorties hospitalières
       - Prescriptions médicales (médicaments, laboratoire, imagerie, dialyse, endoscopie, etc.)
       - Notifications et intégrations externes
       - Planning des médicaments
@@ -31,6 +39,14 @@ async function bootstrap() {
     `)
     .setVersion('1.0')
     .addTag('Patients', 'Gestion des patients')
+    .addTag('Observations', 'Observations médicales')
+    .addTag('Diagnostics', 'Diagnostics médicaux')
+    .addTag('Suivi', 'Suivi médical')
+    .addTag('Demandes d\'avis', 'Demandes d\'avis médicaux')
+    .addTag('Comptes rendus opératoires', 'Comptes rendus opératoires')
+    .addTag('Historique', 'Historique médical')
+    .addTag('Résultats paracliniques', 'Résultats d\'examens paracliniques')
+    .addTag('Sorties', 'Sorties hospitalières')
     .addTag('Prescriptions Médicales', 'Prescriptions de médicaments')
     .addTag('Prescriptions Labo', 'Prescriptions de laboratoire')
     .addTag('Prescriptions Imagerie', 'Prescriptions d\'imagerie')
