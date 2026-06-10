@@ -18,7 +18,7 @@ async function bootstrap() {
       - Planning des médicaments
       
       ## Authentification
-      Les endpoints nécessitent un token d'authentification dans le header Authorization.
+      Non implémentée actuellement (endpoint publics)
       
       ## Variables d'environnement requises
       - DATABASE_URL: URL de connexion PostgreSQL
@@ -45,7 +45,6 @@ async function bootstrap() {
     .addTag('Prescriptions Endoscopie', 'Prescriptions d\'endoscopie')
     .addTag('Planning', 'Planning des prises médicamenteuses')
     .addTag('Notifications', 'Gestion des notifications')
-    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
