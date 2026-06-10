@@ -27,21 +27,6 @@ const TYPE_COLORS: Record<string, string> = {
   dial:  '#14b8a6', ana:  '#ec4899', bloc:  '#1e40af',
 };
 
-const ENDPOINTS: Record<string, string> = {
-  med:   'prescriptions/medicale',
-  nm:    'prescriptions/non-medicale',
-  surv:  'prescriptions/surveillance',
-  trans: 'prescriptions/transfusion',
-  labo:  'prescriptions/labo',
-  imag:  'prescriptions/imagerie',
-  eeg:   'prescriptions/eeg',
-  kine:  'prescriptions/kine',
-  endo:  'prescriptions/endoscopie',
-  dial:  'prescriptions/dialyse',
-  ana:   'prescriptions/anapath',
-  bloc:  'prescriptions/bloc',
-};
-
 interface PrescriptionItem {
   _type: string;
   createdAt?: string;
@@ -60,6 +45,7 @@ interface PrescriptionItem {
   examen?: string;
   analyse?: string;
   seance?: string;
+  seances?: any[];
   intervention?: string;
   urgence?: string;
   alertes?: string;
@@ -105,9 +91,10 @@ interface PrescriptionItem {
 interface Props {
   patient?: { id?: string, idPermanent?: string };
   prescripteur?: { id?: string };
+  onNewPrescription?: () => void;
 }
 
-export default function HistoriqueForm({ patient }: Props) {
+export default function HistoriqueForm({ patient, onNewPrescription }: Props) {
   const [filtre, setFiltre] = useState('all');
   const [items, setItems] = useState<PrescriptionItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -123,26 +110,68 @@ export default function HistoriqueForm({ patient }: Props) {
         const patientId = patient?.id;
         if (!patientId) { setError('ID patient manquant'); setLoading(false); return; }
 
-        const typesToFetch = filtre === 'all' ? Object.keys(ENDPOINTS) : [filtre];
-        const results: PrescriptionItem[] = [];
+        // Utiliser l'endpoint générique avec /active pour récupérer toutes les prescriptions actives
+        const url = `${API_URL}/patients/${patientId}/prescriptions/active`;
+        const res = await api.get(url);
+        const allPrescriptions = Array.isArray(res.data) ? res.data : [];
 
-        await Promise.all(typesToFetch.map(async (type) => {
-          try {
-            const url = `${API_URL}/${ENDPOINTS[type]}/patient/${patientId}`;
-            const res = await api.get(url);
-            const list = Array.isArray(res.data) ? res.data : [];
-            list.forEach((item: Partial<PrescriptionItem>) => results.push({ ...item, _type: type } as PrescriptionItem));
-          } catch { /* ignore les endpoints qui échouent */ }
-        }));
+        // Mapping des types de l'API vers les types utilisés dans l'historique
+        const typeMapping: Record<string, string> = {
+          'medicament': 'med',
+          'non_medicament': 'nm',
+          'surveillance': 'surv',
+          'transfusion': 'trans',
+          'bloc': 'bloc',
+          'paraclinique': 'para', // Pour labo, imag, eeg, kine, endo, dial, ana
+        };
+
+        // Parser le contenu JSON et ajouter le type
+        const results: PrescriptionItem[] = allPrescriptions.map((p: any) => {
+          let parsed: any = {};
+          try { parsed = JSON.parse(p.contenu || '{}'); } catch {}
+
+          // Déterminer le sous-type pour paraclinique
+          let subType: string | undefined = undefined;
+          if (p.type === 'paraclinique') {
+            // Ignorer les prescriptions paracliniques avec seulement urgence (données incomplètes)
+            const keys = Object.keys(parsed);
+            if (keys.length === 1 && keys[0] === 'urgence') {
+              // Ne pas inclure cette prescription dans les résultats
+              return null;
+            }
+            if (parsed.analyses) subType = 'labo';
+            else if (parsed.examens) subType = 'imag';
+            else if (parsed.typeEEG) subType = 'eeg';
+            else if (parsed.typeKine || parsed.seances) subType = 'kine';
+            else if (parsed.typeDialyse) subType = 'dial';
+            else if (parsed.typeExamen) {
+              // Distinguer endo et ana
+              subType = parsed.typeExamen?.toLowerCase().includes('endoscop') ? 'endo' : 'ana';
+            }
+          }
+
+          const finalType = subType || typeMapping[p.type] || p.type;
+
+          return {
+            ...p,
+            ...parsed,
+            _type: finalType,
+          };
+        }).filter((item): item is PrescriptionItem => item !== null);
+
+        // Filtrer par type si nécessaire
+        const filtered = filtre === 'all'
+          ? results
+          : results.filter(item => item._type === filtre);
 
         // Trier par date décroissante
-        results.sort((a, b) => {
+        filtered.sort((a, b) => {
           const da = new Date(a.createdAt || a.date || 0).getTime();
           const db = new Date(b.createdAt || b.date || 0).getTime();
           return db - da;
         });
 
-        setItems(results);
+        setItems(filtered);
       } catch (e: unknown) {
         setError('Erreur lors du chargement : ' + (e instanceof Error ? e.message : String(e)));
       } finally {
@@ -160,7 +189,25 @@ export default function HistoriqueForm({ patient }: Props) {
   }
 
   function getTypeLabel(type: string) {
-    return FILTRES.find(f => f.id === type)?.label || type;
+    const label = FILTRES.find(f => f.id === type)?.label;
+    if (label) return label;
+    // Mapping de secours pour les types qui ne sont pas dans FILTRES
+    const fallbackLabels: Record<string, string> = {
+      'med': 'Médicamenteuse',
+      'nm': 'Non Médicamenteuse',
+      'surv': 'Surveillance',
+      'trans': 'Transfusion',
+      'labo': 'Laboratoire',
+      'imag': 'Imagerie',
+      'eeg': 'EEG',
+      'kine': 'Kinésithérapie',
+      'endo': 'Endoscopie',
+      'dial': 'Dialyse',
+      'ana': 'Anapath',
+      'bloc': 'Bloc Opératoire',
+      'para': 'Paraclinique',
+    };
+    return fallbackLabels[type] || type;
   }
 
   function getResume(item: PrescriptionItem, type: string) {
@@ -169,14 +216,32 @@ export default function HistoriqueForm({ patient }: Props) {
       case 'nm':    return item.type || item.description || 'Non médicamenteuse';
       case 'surv':  return item.parametre || item.type || 'Surveillance';
       case 'trans': return item.produit || item.groupe || 'Transfusion';
-      case 'labo':  return item.examen || item.analyse || 'Analyse laboratoire';
-      case 'imag':  return item.examen || item.type || 'Imagerie';
-      case 'eeg':   return item.type || 'EEG';
-      case 'kine':  return item.type || item.seance || 'Kinésithérapie';
-      case 'endo':  return item.type || 'Endoscopie';
-      case 'dial':  return item.type || 'Dialyse';
-      case 'ana':   return item.examen || item.type || 'Anapath';
+      case 'labo':
+        if (item.analyses && Array.isArray(item.analyses) && item.analyses.length > 0) {
+          return `${item.analyses.length} analyse${item.analyses.length > 1 ? 's' : ''}`;
+        }
+        return 'Analyse laboratoire';
+      case 'imag':
+        if (item.examens && typeof item.examens === 'object') {
+          const count = Object.values(item.examens).flat().length;
+          return `${count} examen${count > 1 ? 's' : ''}`;
+        }
+        return 'Imagerie';
+      case 'eeg':   return item.typeEEG || 'EEG';
+      case 'kine':
+        if (item.seances && Array.isArray(item.seances) && item.seances.length > 0) {
+          return `${item.seances.length} séance${item.seances.length > 1 ? 's' : ''}`;
+        }
+        return item.typeKine || 'Kinésithérapie';
+      case 'endo':  return item.typeExamen || 'Endoscopie';
+      case 'dial':
+        if (item.seances && Array.isArray(item.seances) && item.seances.length > 0) {
+          return `${item.seances.length} séance${item.seances.length > 1 ? 's' : ''}`;
+        }
+        return item.typeDialyse || 'Dialyse';
+      case 'ana':   return item.typeExamen || 'Anapath';
       case 'bloc':  return item.intervention || item.type || 'Bloc opératoire';
+      case 'para':  return 'Paraclinique (données incomplètes)';
       default:      return item.description || item.nom || '—';
     }
   }
@@ -197,12 +262,28 @@ export default function HistoriqueForm({ patient }: Props) {
   }
 
   function getUrgenceLabel(u?: string) {
-    if (!u) return '';
-    switch (u.toLowerCase()) {
-      case 'n': return 'Normale';
-      case 'u': return 'Urgente';
-      case 'tu': return 'STAT (Urgence vitale)';
-      default: return u;
+    if (!u) return 'Non spécifiée';
+    const urgency = u.toLowerCase();
+    switch (urgency) {
+      case 'n':
+      case 'normale':
+      case 'normal':
+        return 'Normale (non urgente)';
+      case 'u':
+      case 'urgente':
+      case 'urgent':
+        return 'Urgente (prioritaire)';
+      case 'tu':
+      case 'stat':
+      case 'très urgente':
+      case 'urgence vitale':
+        return 'STAT (urgence vitale - immédiate)';
+      default:
+        // Si c'est déjà un texte descriptif, le retourner tel quel
+        if (urgency.length > 2) {
+          return u.charAt(0).toUpperCase() + u.slice(1);
+        }
+        return u;
     }
   }
 
@@ -361,6 +442,18 @@ export default function HistoriqueForm({ patient }: Props) {
             {renderDetailField('Renseignements cliniques', item.renseignements)}
             {renderDetailField('Type de kinésithérapie', item.typeKine)}
             {renderDetailField('Diagnostic', item.diagnostic)}
+            {item.seances && Array.isArray(item.seances) && item.seances.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Séances:</div>
+                {item.seances.map((seance: any, idx: number) => (
+                  <div key={idx} style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6, marginBottom: 8 }}>
+                    {renderDetailField('Date', seance.date)}
+                    {renderDetailField('Durée', seance.duree)}
+                    {renderDetailField('Fréquence', seance.frequence)}
+                  </div>
+                ))}
+              </div>
+            )}
             {item.contreIndications && Array.isArray(item.contreIndications) && item.contreIndications.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt3)' }}>Contre-indications:</div>
@@ -371,6 +464,7 @@ export default function HistoriqueForm({ patient }: Props) {
             )}
             {renderDetailField('Objectifs', item.objectifs)}
             {renderDetailField('Remarques', item.remarques)}
+            {renderDetailField('Notes', item.notes)}
           </div>
         );
 
@@ -382,6 +476,7 @@ export default function HistoriqueForm({ patient }: Props) {
             {renderDetailField('Renseignements cliniques', item.renseignements)}
             {renderDetailField("Type d'examen", item.typeExamen)}
             {renderDetailField('Remarques', item.remarques)}
+            {renderDetailField('Notes', item.notes)}
           </div>
         );
 
@@ -392,7 +487,20 @@ export default function HistoriqueForm({ patient }: Props) {
             {renderDetailField('Alertes', item.alertes)}
             {renderDetailField('Renseignements cliniques', item.renseignements)}
             {renderDetailField('Type de dialyse', item.typeDialyse)}
+            {item.seances && Array.isArray(item.seances) && item.seances.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Séances:</div>
+                {item.seances.map((seance: any, idx: number) => (
+                  <div key={idx} style={{ background: 'var(--bg2)', padding: 10, borderRadius: 6, marginBottom: 8 }}>
+                    {renderDetailField('Date', seance.date)}
+                    {renderDetailField('Durée', seance.duree)}
+                    {renderDetailField('Fréquence', seance.frequence)}
+                  </div>
+                ))}
+              </div>
+            )}
             {renderDetailField('Remarques', item.remarques)}
+            {renderDetailField('Notes', item.notes)}
           </div>
         );
 
@@ -402,6 +510,7 @@ export default function HistoriqueForm({ patient }: Props) {
             {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
             {renderDetailField('Alertes', item.alertes)}
             {renderDetailField("Type d'examen", item.typeExamen)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
             {item.data && typeof item.data === 'object' && Object.keys(item.data).length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: color, marginBottom: 8 }}>Détails:</div>
@@ -410,6 +519,23 @@ export default function HistoriqueForm({ patient }: Props) {
                 ))}
               </div>
             )}
+            {renderDetailField('Remarques', item.remarques)}
+            {renderDetailField('Notes', item.notes)}
+          </div>
+        );
+
+      case 'para':
+        // Cas générique pour les prescriptions paracliniques avec données incomplètes
+        return (
+          <div>
+            {renderDetailField('Urgence', getUrgenceLabel(item.urgence))}
+            {renderDetailField('Alertes', item.alertes)}
+            {renderDetailField('Renseignements cliniques', item.renseignements)}
+            {renderDetailField('Notes', item.notes)}
+            {renderDetailField('Remarques', item.remarques)}
+            <div style={{ marginTop: 12, padding: 10, background: '#fff3cd', borderRadius: 6, fontSize: 12, color: '#856404' }}>
+              Prescription paraclinique avec données incomplètes. Type spécifique non détecté.
+            </div>
           </div>
         );
 
@@ -439,14 +565,31 @@ export default function HistoriqueForm({ patient }: Props) {
 
   return (
     <div>
-      {/* TITRE */}
-      <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
-          Historique des prescriptions
-        </h2>
-        <p style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 4 }}>
-          {items.length} prescription{items.length > 1 ? 's' : ''} trouvée{items.length > 1 ? 's' : ''}
-        </p>
+      {/* TITRE ET BOUTON */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
+            Historique des prescriptions
+          </h2>
+          <p style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 4 }}>
+            {items.length} prescription{items.length > 1 ? 's' : ''} trouvée{items.length > 1 ? 's' : ''}
+          </p>
+        </div>
+        {onNewPrescription && (
+          <button
+            onClick={onNewPrescription}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 8,
+              background: 'var(--navy)', color: '#fff',
+              border: 'none', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', transition: 'all .15s',
+            }}
+          >
+            <span className="ms" style={{ fontSize: 18 }}>add</span>
+            Nouvelle prescription
+          </button>
+        )}
       </div>
 
       {/* FILTRES */}
@@ -479,12 +622,7 @@ export default function HistoriqueForm({ patient }: Props) {
         <div style={{ background: 'var(--red-lt)', border: '1px solid var(--red-bdr)', borderRadius: 8, padding: 16, color: 'var(--red)', fontSize: 13 }}>
           {error}
         </div>
-      ) : items.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--txt3)' }}>
-          <span className="ms" style={{ fontSize: 36, display: 'block', marginBottom: 8 }}>inbox</span>
-          Aucune prescription trouvée
-        </div>
-      ) : (
+      ) : items.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((item, i) => {
             const color = TYPE_COLORS[item._type] || 'var(--navy)';
@@ -539,6 +677,11 @@ export default function HistoriqueForm({ patient }: Props) {
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--txt3)' }}>
+          <span className="ms" style={{ fontSize: 36, display: 'block', marginBottom: 8 }}>inbox</span>
+          Aucune prescription trouvée
         </div>
       )}
 
