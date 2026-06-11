@@ -52,7 +52,7 @@ export class PrescriptionService {
       }
 
       await this.notificationApiService.createNotification({
-        type: 'PRESCRIPTION',
+        type: 'ORDONNANCE',
         motif: `Nouvelle prescription pour le patient ${createDto.patientId}`,
         sourceServiceId: serviceInfo.serviceId,
         sourceServiceName: `${chuInfo.name} - ${serviceInfo.name}`,
@@ -66,8 +66,8 @@ export class PrescriptionService {
         patientId: createDto.patientId,
         entiteRefType: 'Prescription',
         entiteRefId: saved.id,
-        urgence: 2,
-        channels: ['WEB', 'SOUND'],
+        urgence: 3,
+        channels: ['INTERNAL'],
       });
     } catch (error) {
       console.error('Erreur lors de l\'envoi de la notification:', error);

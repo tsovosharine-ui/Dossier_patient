@@ -53,15 +53,17 @@ export class SurveillanceService {
       }),
     );
 
-    // Generate planning for each parameter
-    const prescriptionWithParametres = await this.findOne(savedPrescription.id);
-    for (const parametre of prescriptionWithParametres.parametres) {
-      if (parametre.intervalleMinutes && parametre.planningActif) {
-        await this.planningService.generatePlanningSurveillance(parametre.id);
+    // Generate planning for each parameter only if notifierInfirmier is true
+    if (savedPrescription.notifierInfirmier) {
+      const prescriptionWithParametres = await this.findOne(savedPrescription.id);
+      for (const parametre of prescriptionWithParametres.parametres) {
+        if (parametre.intervalleMinutes && parametre.planningActif) {
+          await this.planningService.generatePlanningSurveillance(parametre.id);
+        }
       }
     }
 
-    return prescriptionWithParametres;
+    return await this.findOne(savedPrescription.id);
   }
 
   async findAll() {

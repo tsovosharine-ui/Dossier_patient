@@ -65,31 +65,33 @@ export class MedicaleService {
       });
     }
 
-    // Create notification
-    await this.notificationService.create({
-      type: 'PRESCRIPTION_MEDICALE',
-      titre: `Nouvelle prescription médicale`,
-      destinataire: 'INFIRMIER',
-      expediteurId: prescripteurId,
-      patientId: savedPrescription.patientId,
-      referenceId: savedPrescription.id,
-      referenceType: 'PRESCRIPTION_MEDICALE',
-      contenu: {
-        medicaments,
-        remarques: savedPrescription.remarques,
-      },
-      statut: 'EN_ATTENTE',
-    });
+    // Create notification and generate planning only if notifierInfirmier is true
+    if (savedPrescription.notifierInfirmier) {
+      await this.notificationService.create({
+        type: 'PRESCRIPTION_MEDICALE',
+        titre: `Nouvelle prescription médicale`,
+        destinataire: 'INFIRMIER',
+        expediteurId: prescripteurId,
+        patientId: savedPrescription.patientId,
+        referenceId: savedPrescription.id,
+        referenceType: 'PRESCRIPTION_MEDICALE',
+        contenu: {
+          medicaments,
+          remarques: savedPrescription.remarques,
+        },
+        statut: 'EN_ATTENTE',
+      });
 
-    // Generate planning for each medication
-    const prescriptionWithMedicaments = await this.findOne(savedPrescription.id);
-    for (const medicament of prescriptionWithMedicaments.medicaments) {
-      if (medicament.intervalleMinutes && medicament.planningActif) {
-        await this.planningService.generatePlanningMedicament(medicament.id);
+      // Generate planning for each medication
+      const prescriptionWithMedicaments = await this.findOne(savedPrescription.id);
+      for (const medicament of prescriptionWithMedicaments.medicaments) {
+        if (medicament.intervalleMinutes && medicament.planningActif) {
+          await this.planningService.generatePlanningMedicament(medicament.id);
+        }
       }
     }
 
-    return prescriptionWithMedicaments;
+    return await this.findOne(savedPrescription.id);
   }
 
   async findAll() {

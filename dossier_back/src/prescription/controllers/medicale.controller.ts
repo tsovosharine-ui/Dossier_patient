@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { MedicaleService } from '../services/medicale.service';
 import { CreatePrescriptionMedicaleDto } from '../dto/create-prescription-medicale.dto';
@@ -52,5 +52,20 @@ export class MedicaleController {
   @ApiResponse({ status: 200, description: 'Statut mis à jour avec succès' })
   updateStatut(@Param('id') id: string, @Body() dto: { statut: string }) {
     return this.service.updateStatut(id, dto.statut);
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: 'Rechercher des médicaments via l\'API pharmacie' })
+  @ApiResponse({ status: 200, description: 'Liste des médicaments trouvés' })
+  searchMedicaments(@Query('q') query: string) {
+    return this.service.searchMedicaments(query);
+  }
+
+  @Get('stock/:articleId')
+  @ApiOperation({ summary: 'Vérifier le stock d\'un médicament' })
+  @ApiParam({ name: 'articleId', description: 'ID de l\'article/médicament' })
+  @ApiResponse({ status: 200, description: 'Stock du médicament' })
+  checkStock(@Param('articleId') articleId: string) {
+    return this.service.checkStock(articleId);
   }
 }

@@ -33,14 +33,27 @@ export class PharmacieService {
     this.category = this.configService.get<string>('PHARMACIE_CATEGORY') || 'chu-fianarantsoa';
   }
 
-  // Créer une ordonnance externe
+  // Créer une ordonnance externe via les dispensations
   async createOrdonnance(prescriptionId: string, ordonnanceData: CreateOrdonnanceDto): Promise<any> {
     try {
       this.logger.log(`Création d'une ordonnance externe pour la prescription ${prescriptionId}`);
+      const dispensationData = {
+        patient_name: `Patient ${ordonnanceData.patientId}`,
+        patient_record: ordonnanceData.patientId,
+        prescription_number: prescriptionId,
+        payment_mode: 'PAYANT',
+        status: 'EN_ATTENTE',
+        lines: ordonnanceData.medicaments.map((med: any) => ({
+          article_id: null,
+          article_name: med.nom,
+          dosage: med.dose,
+          quantity: med.quantite || 1,
+        })),
+      };
       const response = await firstValueFrom(
-        this.httpService.post(`${this.apiUrl}/prescriptions/${this.category}/${prescriptionId}/ordonnance`, ordonnanceData),
+        this.httpService.post(`${this.apiUrl}/dispensations`, dispensationData),
       );
-      this.logger.log(`Ordonnance créée avec succès`);
+      this.logger.log(`Ordonnance créée avec succès via dispensations`);
       return response.data;
     } catch (error) {
       this.logger.error(`Erreur lors de la création de l'ordonnance: ${error.message}`);
@@ -48,12 +61,12 @@ export class PharmacieService {
     }
   }
 
-  // Mettre à jour le statut d'une prescription externe
+  // Mettre à jour le statut d'une dispensation externe
   async updatePrescriptionStatus(prescriptionId: string, statut: string): Promise<any> {
     try {
-      this.logger.log(`Mise à jour du statut de la prescription ${prescriptionId} à ${statut}`);
+      this.logger.log(`Mise à jour du statut de la dispensation ${prescriptionId} à ${statut}`);
       const response = await firstValueFrom(
-        this.httpService.put(`${this.apiUrl}/prescriptions/${this.category}/${prescriptionId}/statut`, { statut }),
+        this.httpService.patch(`${this.apiUrl}/dispensations/${prescriptionId}/status`, { status: statut }),
       );
       this.logger.log(`Statut mis à jour avec succès`);
       return response.data;

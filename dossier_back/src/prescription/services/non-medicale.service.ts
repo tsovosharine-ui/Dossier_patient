@@ -53,15 +53,17 @@ export class NonMedicaleService {
       }),
     );
 
-    // Generate planning for each item
-    const prescriptionWithItems = await this.findOne(savedPrescription.id);
-    for (const item of prescriptionWithItems.items) {
-      if (item.intervalleMinutes && item.planningActif) {
-        await this.planningService.generatePlanningNonMedical(item.id);
+    // Generate planning for each item only if notifierInfirmier is true
+    if (savedPrescription.notifierInfirmier) {
+      const prescriptionWithItems = await this.findOne(savedPrescription.id);
+      for (const item of prescriptionWithItems.items) {
+        if (item.intervalleMinutes && item.planningActif) {
+          await this.planningService.generatePlanningNonMedical(item.id);
+        }
       }
     }
 
-    return prescriptionWithItems;
+    return await this.findOne(savedPrescription.id);
   }
 
   async findAll() {
