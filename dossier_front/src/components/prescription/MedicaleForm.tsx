@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { creerPrescriptionMedicale, getPrescriptionsPatient, terminerPrescription as apiTerminerPrescription } from '@/lib/prescriptionApi';
+import { creerPrescriptionMedicale, getPrescriptionsPatient, terminerPrescription as apiTerminerPrescription, searchMedicaments } from '@/lib/prescriptionApi';
 
 interface Medicament {
   id: string;
@@ -28,30 +28,15 @@ interface PrescriptionEnCours {
 }
 
 interface StockItem {
-  code: string;
-  nom: string;
-  dose: string;
-  conditionnement: string;
-  stockDisponible: number;
+  id?: string;
+  nom?: string;
+  dci?: string;
+  dosage?: string;
+  conditionnement?: string;
+  stock_total?: number;
+  stock_minimum?: number;
+  [key: string]: any;
 }
-
-const STOCK_MEDICAMENTS: StockItem[] = [
-  { code: "PARA500", nom: "Paracétamol", dose: "500 mg", conditionnement: "1 plaquette (16 comprimés)", stockDisponible: 10 },
-  { code: "PARA1G", nom: "Paracétamol", dose: "1 g", conditionnement: "1 boîte (8 comprimés effervescents)", stockDisponible: 5 },
-  { code: "AMOX500", nom: "Amoxicilline", dose: "500 mg", conditionnement: "1 plaquette (12 gélules)", stockDisponible: 7 },
-  { code: "AMOX1G", nom: "Amoxicilline", dose: "1 g", conditionnement: "1 flacon (poudre pour solution injectable IM/IV)", stockDisponible: 3 },
-  { code: "CIPRO", nom: "Ciprofloxacine", dose: "500 mg", conditionnement: "1 boîte (10 comprimés pelliculés)", stockDisponible: 0 },
-  { code: "METRO", nom: "Métronidazole", dose: "500 mg", conditionnement: "1 plaquette (20 comprimés)", stockDisponible: 4 },
-  { code: "OMEP", nom: "Oméprazole", dose: "20 mg", conditionnement: "1 plaquette (14 gélules gastro-résistantes)", stockDisponible: 9 },
-  { code: "FURO", nom: "Furosémide", dose: "40 mg", conditionnement: "1 boîte (30 comprimés sécables)", stockDisponible: 2 },
-  { code: "METFORMIN", nom: "Metformine", dose: "500 mg", conditionnement: "1 plaquette (28 comprimés pelliculés)", stockDisponible: 6 },
-  { code: "INSULINE", nom: "Insuline glargine", dose: "", conditionnement: "1 stylo prérempli (3 ml)", stockDisponible: 8 },
-  { code: "SALBU", nom: "Salbutamol", dose: "100 µg/dose", conditionnement: "1 flacon aérosol inhalateur (200 doses)", stockDisponible: 0 },
-  { code: "PRED", nom: "Prednisone", dose: "20 mg", conditionnement: "1 boîte (20 comprimés)", stockDisponible: 12 },
-  { code: "IBU", nom: "Ibuprofène", dose: "400 mg", conditionnement: "1 boîte (30 comprimés pelliculés)", stockDisponible: 5 },
-  { code: "TRAMADOL", nom: "Tramadol", dose: "50 mg", conditionnement: "1 plaquette (10 comprimés)", stockDisponible: 1 },
-  { code: "CEFTRIAXONE", nom: "Ceftriaxone", dose: "1 g", conditionnement: "1 flacon (poudre pour solution injectable IM/IV)", stockDisponible: 15 },
-];
 
 interface Props {
   patient: { 
@@ -128,6 +113,7 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [toast, setToast] = useState('');
   const [showOrdModal, setShowOrdModal] = useState(false);
   const [showOrdonnanceModal, setShowOrdonnanceModal] = useState(false);
@@ -165,24 +151,39 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2800); }
 
-  const handleSearchChange = (value: string) => {
+  const handleSearchChange = async (value: string) => {
     setNom(value);
+    if (searchTimeout) clearTimeout(searchTimeout);
+
     if (value.trim().length > 0) {
-      const q = value.toLowerCase();
-      const filtered = STOCK_MEDICAMENTS.filter(med =>
-        `${med.nom} ${med.dose} ${med.conditionnement}`.toLowerCase().includes(q)
-      );
-      setSuggestions(filtered);
-      setShowSuggestions(filtered.length > 0);
+      setLoading(true);
+      setApiError('');
+      const timeout = setTimeout(async () => {
+        try {
+          const results = await searchMedicaments(value);
+          setSuggestions(results);
+          setShowSuggestions(results.length > 0);
+        } catch (err) {
+          console.error('Erreur lors de la recherche:', err);
+          setApiError('Erreur lors de la recherche de médicaments');
+          setSuggestions([]);
+          setShowSuggestions(false);
+        } finally {
+          setLoading(false);
+        }
+      }, 300);
+      setSearchTimeout(timeout);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
+      setLoading(false);
     }
   };
 
   const selectSuggestion = (med: StockItem) => {
-    const nomComplet = `${med.nom} ${med.dose} — ${med.conditionnement}`;
+    const nomComplet = `${med.dci || med.nom || ''} ${med.dosage || ''}`.trim();
     setNom(nomComplet);
+    setDose(med.dosage || '');
     setShowSuggestions(false);
   };
 
@@ -384,22 +385,24 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
             {showSuggestions && suggestions.length > 0 && (
               <ul style={{ position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 2, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 30, maxHeight: 200, overflowY: 'auto', listStyle: 'none', padding: 0, margin: 0 }}>
                 {suggestions.map((med) => (
-                  <li key={med.code} onMouseDown={() => selectSuggestion(med)}
+                  <li key={med.id || med.code} onMouseDown={() => selectSuggestion(med)}
                     style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid var(--bdr)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{med.nom} {med.dose} — {med.conditionnement}</span>
+                    <span>{med.dci || med.nom} {med.dosage || med.dose}</span>
                     <span style={{
                       fontSize: 11,
-                      color: med.stockDisponible > 0 ? 'var(--green)' : 'var(--red)',
+                      color: (med.stock_total || 0) > 0 ? 'var(--green)' : 'var(--red)',
                       marginLeft: 8,
                       fontWeight: 600
                     }}>
-                      {med.stockDisponible > 0 ? `${med.stockDisponible} dispo` : 'Rupture'}
+                      {(med.stock_total || 0) > 0 ? `${med.stock_total} dispo` : 'Rupture'}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="hint">Le médicament est recherché dans le stock en détail de la pharmacie.</p>
+            {loading && <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: 3 }}>Recherche en cours...</div>}
+            {apiError && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{apiError}</div>}
+            <p className="hint">Le médicament est recherché dans le stock de la pharmacie via l'API.</p>
           </div>
           {/* Le reste du formulaire reste inchangé */}
           <div className="g2 mb12">

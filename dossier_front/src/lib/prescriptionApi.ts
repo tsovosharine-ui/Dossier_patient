@@ -192,3 +192,25 @@ export async function creerPrescriptionEndoscopie(data: any) {
 export async function getPrescriptionsActivesByType(type: string, patientId: string): Promise<any[]> {
   return getPrescriptionsPatient(type, patientId);
 }
+
+// ── PHARMACIE API ───────────────────────────────────────────────
+
+export async function searchMedicaments(query: string): Promise<any[]> {
+  try {
+    const response = await api.get(`/prescriptions/medicale/search?q=${encodeURIComponent(query)}`);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    console.error('searchMedicaments error:', err);
+    return [];
+  }
+}
+
+export async function checkStock(articleId: string): Promise<any[]> {
+  try {
+    const response = await api.get(`/prescriptions/medicale/stock/${articleId}`);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    console.error('checkStock error:', err);
+    return [];
+  }
+}
