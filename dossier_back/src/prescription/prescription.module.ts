@@ -23,6 +23,7 @@ import { NotificationService } from './services/notification.service';
 import { NotificationApiModule } from '../notification-api/notification-api.module';
 import { ChuModule } from '../chu/chu.module';
 import { PharmacieModule } from '../pharmacie/pharmacie.module';
+import { DialyseModule } from '../dialyse/dialyse.module';
 import { MedicaleController } from './controllers/medicale.controller';
 import { NonMedicaleController } from './controllers/non-medicale.controller';
 import { SurveillanceController } from './controllers/surveillance.controller';
@@ -88,6 +89,7 @@ import { SurveillanceParametre } from './entities/surveillance-parametre.entity'
     NotificationApiModule,
     ChuModule,
     PharmacieModule,
+    DialyseModule,
   ],
   controllers: [
     PrescriptionController,

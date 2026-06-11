@@ -7,6 +7,7 @@ import { HistoriqueService } from '../historique/historique.service';
 import { TypeAction } from '../historique/entities/historique.entity';
 import { NotificationApiService } from '../notification-api/notification-api.service';
 import { ChuService } from '../chu/chu.service';
+import { DialyseService as DialyseApiService } from '../dialyse/dialyse.service';
 
 @Injectable()
 export class PrescriptionService {
@@ -16,6 +17,7 @@ export class PrescriptionService {
     private historiqueService: HistoriqueService,
     private notificationApiService: NotificationApiService,
     private chuService: ChuService,
+    private dialyseApiService: DialyseApiService,
   ) {}
 
   async create(createDto: CreatePrescriptionDto, serviceName?: string): Promise<Prescription> {

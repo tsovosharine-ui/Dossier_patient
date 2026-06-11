@@ -8,6 +8,7 @@ import { HistoriqueService } from '../historique/historique.service';
 import { TypeAction } from '../historique/entities/historique.entity';
 import { NotificationApiService } from '../notification-api/notification-api.service';
 import { ChuService } from '../chu/chu.service';
+import { DialyseService as DialyseApiService } from '../dialyse/dialyse.service';
 
 @Injectable()
 export class AvisService {
@@ -17,6 +18,7 @@ export class AvisService {
     private historiqueService: HistoriqueService,
     private notificationApiService: NotificationApiService,
     private chuService: ChuService,
+    private dialyseApiService: DialyseApiService,
   ) {}
 
   async create(patientId: string, dto: CreateDemandeAvisDto): Promise<DemandeAvis> {
@@ -66,6 +68,36 @@ export class AvisService {
         urgence: 3,
         channels: ['WEB', 'SOUND'],
       });
+
+      // Si le service destinataire est Dialyse, envoyer la demande d'avis vers le système dialyse
+      if (dto.serviceDestinataire.toLowerCase().includes('dialyse')) {
+        try {
+          // First, try to find or create the patient in the dialyse system
+          let dialysePatient = await this.dialyseApiService.getPatientByExternalId(patientId);
+          
+          if (!dialysePatient) {
+            // Create patient if not found with default values
+            dialysePatient = await this.dialyseApiService.createPatient({
+              nom: 'Patient',
+              prenom: '',
+              dateNaissance: null,
+              telephone: null,
+              notes: `Patient ID: ${patientId}`,
+              external_patient_id: patientId,
+            });
+          }
+
+          // Create demande d'avis in dialyse system
+          await this.dialyseApiService.createDemandeAvis({
+            patientId: dialysePatient.id,
+            description_cas: dto.motif,
+            priorite: 'moyenne',
+            date_envoi: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error('Erreur lors de l\'envoi à l\'API dialyse:', error);
+        }
+      }
     } catch (error) {
       console.error('Erreur lors de l\'envoi de la notification:', error);
     }

@@ -6,9 +6,10 @@ import { AvisController } from './avis.controller';
 import { HistoriqueModule } from '../historique/historique.module';
 import { NotificationApiModule } from '../notification-api/notification-api.module';
 import { ChuModule } from '../chu/chu.module';
+import { DialyseModule } from '../dialyse/dialyse.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DemandeAvis]), HistoriqueModule, NotificationApiModule, ChuModule],
+  imports: [TypeOrmModule.forFeature([DemandeAvis]), HistoriqueModule, NotificationApiModule, ChuModule, DialyseModule],
   providers: [AvisService],
   controllers: [AvisController],
   exports: [AvisService],
