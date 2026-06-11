@@ -14,6 +14,9 @@ import { HistoriqueModule } from './historique/historique.module';
 import { AvisModule } from './avis/avis.module';
 import { PrescriptionModule } from './prescription/prescription.module';
 import { IntegrationModule } from './integration/integration.module';
+import { PlanningModule } from './planning/planning.module';
+import { NotificationApiModule } from './notification-api/notification-api.module';
+import { ChuModule } from './chu/chu.module';
 import { PatientSyncInterceptor } from './patient/patient-sync.interceptor';
 import { PatientService } from './patient/patient.service';
 import { Patient } from './patient/entities/patient.entity';
@@ -35,6 +38,8 @@ import { PrescriptionDialyse } from './prescription/entities/prescription-dialys
 import { PrescriptionEndoscopie } from './prescription/entities/prescription-endoscopie.entity';
 import { PriseMedicament } from './prescription/entities/prise-medicament.entity';
 import { Notification } from './prescription/entities/notification.entity';
+import { TacheNonMedicale } from './prescription/entities/tache-non-medicale.entity';
+import { SurveillanceParametre } from './prescription/entities/surveillance-parametre.entity';
 
 @Module({
   imports: [
@@ -71,6 +76,8 @@ import { Notification } from './prescription/entities/notification.entity';
       PrescriptionEndoscopie,
       PriseMedicament,
       Notification,
+      TacheNonMedicale,
+      SurveillanceParametre,
     ]),
     PatientModule,
     ObservationModule,
@@ -83,6 +90,9 @@ import { Notification } from './prescription/entities/notification.entity';
     AvisModule,
     PrescriptionModule,
     IntegrationModule,
+    PlanningModule,
+    NotificationApiModule,
+    ChuModule,
   ],
   providers: [
     PatientService,

@@ -35,10 +35,10 @@ export class Medicament {
   frequenceValeur: number;
 
   @Column({ name: 'intervalle_minutes', nullable: true, type: 'int' })
-  intervalleMinutes: number;
+  intervalleMinutes: number | null;
 
   @Column({ name: 'duree_jours', nullable: true, type: 'int' })
-  dureeJours: number;
+  dureeJours: number | null;
 
   @Column({ name: 'date_debut', type: 'timestamptz', nullable: true })
   dateDebut: Date;

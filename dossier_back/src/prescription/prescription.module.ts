@@ -6,6 +6,7 @@ import { PrescriptionService } from './prescription.service';
 import { Prescription } from './entities/prescription.entity';
 import { HistoriqueModule } from '../historique/historique.module';
 import { IntegrationModule } from '../integration/integration.module';
+import { PlanningModule } from '../planning/planning.module';
 import { MedicaleService } from './services/medicale.service';
 import { NonMedicaleService } from './services/non-medicale.service';
 import { SurveillanceService } from './services/surveillance.service';
@@ -19,7 +20,9 @@ import { KineService } from './services/kine.service';
 import { DialyseService } from './services/dialyse.service';
 import { EndoscopieService } from './services/endoscopie.service';
 import { NotificationService } from './services/notification.service';
-import { PlanningService } from './services/planning.service';
+import { NotificationApiModule } from '../notification-api/notification-api.module';
+import { ChuModule } from '../chu/chu.module';
+import { PharmacieModule } from '../pharmacie/pharmacie.module';
 import { MedicaleController } from './controllers/medicale.controller';
 import { NonMedicaleController } from './controllers/non-medicale.controller';
 import { SurveillanceController } from './controllers/surveillance.controller';
@@ -50,6 +53,8 @@ import { PrescriptionDialyse } from './entities/prescription-dialyse.entity';
 import { PrescriptionEndoscopie } from './entities/prescription-endoscopie.entity';
 import { PriseMedicament } from './entities/prise-medicament.entity';
 import { Notification } from './entities/notification.entity';
+import { TacheNonMedicale } from './entities/tache-non-medicale.entity';
+import { SurveillanceParametre } from './entities/surveillance-parametre.entity';
 
 @Module({
   imports: [
@@ -73,10 +78,16 @@ import { Notification } from './entities/notification.entity';
       PrescriptionEndoscopie,
       PriseMedicament,
       Notification,
+      TacheNonMedicale,
+      SurveillanceParametre,
     ]),
     HttpModule,
     HistoriqueModule,
     IntegrationModule,
+    PlanningModule,
+    NotificationApiModule,
+    ChuModule,
+    PharmacieModule,
   ],
   controllers: [
     PrescriptionController,
@@ -108,7 +119,6 @@ import { Notification } from './entities/notification.entity';
     DialyseService,
     EndoscopieService,
     NotificationService,
-    PlanningService,
   ],
   exports: [
     PrescriptionService,
@@ -125,7 +135,6 @@ import { Notification } from './entities/notification.entity';
     DialyseService,
     EndoscopieService,
     NotificationService,
-    PlanningService,
   ],
 })
 export class PrescriptionModule {}

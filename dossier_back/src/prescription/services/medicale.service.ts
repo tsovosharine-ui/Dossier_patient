@@ -6,7 +6,8 @@ import { Medicament } from '../entities/medicament.entity';
 import { Ordonnance } from '../entities/ordonnance.entity';
 import { ExternalIntegrationService, IntegrationConfig } from '../../integration/external-integration.service';
 import { NotificationService } from './notification.service';
-import { PlanningService } from './planning.service';
+import { PlanningService } from '../../planning/planning.service';
+import { PharmacieService } from '../../pharmacie/pharmacie.service';
 
 @Injectable()
 export class MedicaleService {
@@ -20,6 +21,7 @@ export class MedicaleService {
     private integrationService: ExternalIntegrationService,
     private notificationService: NotificationService,
     private planningService: PlanningService,
+    private pharmacieService: PharmacieService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
@@ -34,10 +36,8 @@ export class MedicaleService {
 
     await Promise.all(
       medicaments.map((m: any) => {
-        const intervalleMinutes =
-          m.frequenceType && m.frequenceValeur
-            ? this.planningService.calculerIntervalleMinutes(m.frequenceType, m.frequenceValeur)
-            : undefined;
+        const intervalleMinutes = this.planningService.parseFrequence(m.frequence);
+        const dureeJours = this.planningService.parseDuree(m.duree);
 
         return this.medicamentRepo.save({
           ...m,
@@ -45,6 +45,7 @@ export class MedicaleService {
           dateDebut: m.dateDebut ? new Date(m.dateDebut) : undefined,
           quantite: m.quantite || 1,
           intervalleMinutes,
+          dureeJours,
           dateDebutEffective: m.dateDebut ? new Date(m.dateDebut) : new Date(),
           planningActif: true,
         });
@@ -84,7 +85,7 @@ export class MedicaleService {
     const prescriptionWithMedicaments = await this.findOne(savedPrescription.id);
     for (const medicament of prescriptionWithMedicaments.medicaments) {
       if (medicament.intervalleMinutes && medicament.planningActif) {
-        await this.planningService.genererPlanningMedicament(medicament.id);
+        await this.planningService.generatePlanningMedicament(medicament.id);
       }
     }
 
@@ -122,37 +123,81 @@ export class MedicaleService {
     });
     const savedOrdonnance = await this.ordonnanceRepo.save(ordonnance);
 
-    // Send to external pharmacy API if configured
-    if (process.env.PHARMACY_API_URL) {
-      const config: IntegrationConfig = {
-        apiUrl: process.env.PHARMACY_API_URL,
-        endpoint: '/ordonnances',
-      };
-      try {
-        await this.integrationService.sendToExternalApi(config, {
-          prescriptionId,
+    // Récupérer la prescription pour obtenir les informations nécessaires
+    const prescription = await this.findOne(prescriptionId);
+
+    // Envoyer l'ordonnance à l'API pharmacie
+    try {
+      await this.pharmacieService.createOrdonnance(prescriptionId, {
+        patientId: prescription.patientId,
+        prescriptionId: prescriptionId,
+        medicaments: medicaments,
+        dateOrdonnance: new Date(),
+        prescripteur: prescription.prescripteurId,
+      });
+
+      // Envoyer une notification à l'API pharmacie
+      await this.pharmacieService.sendNotification({
+        type: 'ORDONNANCE',
+        motif: `Nouvelle ordonnance pour le patient ${prescription.patientId}`,
+        destinataireId: 'pharmacie',
+        scope: 'pharmacie',
+        data: {
+          prescriptionId: prescriptionId,
           ordonnanceId: savedOrdonnance.id,
-          medicaments,
-        });
-        
-        // Update sync status
-        await this.prescriptionRepo.update(prescriptionId, {
-          statutSync: 'SUCCES',
-          syncedAt: new Date(),
-        });
-      } catch (error) {
-        await this.prescriptionRepo.update(prescriptionId, {
-          statutSync: 'ECHEC',
-          syncError: String(error),
-          syncedAt: new Date(),
-        });
-      }
+          patientId: prescription.patientId,
+        },
+      });
+
+      // Update sync status
+      await this.prescriptionRepo.update(prescriptionId, {
+        statutSync: 'SUCCES',
+        syncedAt: new Date(),
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi à l\'API pharmacie:', error);
+      await this.prescriptionRepo.update(prescriptionId, {
+        statutSync: 'ECHEC',
+        syncError: String(error),
+        syncedAt: new Date(),
+      });
     }
 
     return savedOrdonnance;
   }
 
   async updateStatut(id: string, statut: string) {
+    // Mettre à jour le statut localement
+    await this.prescriptionRepo.update(id, { statut });
+
+    // Synchroniser avec l'API pharmacie
+    try {
+      await this.pharmacieService.updatePrescriptionStatus(id, statut);
+    } catch (error) {
+      console.error('Erreur lors de la synchronisation du statut avec l\'API pharmacie:', error);
+    }
+
     return this.prescriptionRepo.update(id, { statut });
+  }
+
+  // Rechercher des médicaments via l'API pharmacie
+  async searchMedicaments(query: string): Promise<any[]> {
+    try {
+      return await this.pharmacieService.searchMedicaments(query);
+    } catch (error) {
+      console.error('Erreur lors de la recherche de médicaments dans l\'API pharmacie:', error);
+      // En cas d'erreur, retourner un tableau vide
+      return [];
+    }
+  }
+
+  // Vérifier le stock d'un médicament
+  async checkStock(articleId: string): Promise<any[]> {
+    try {
+      return await this.pharmacieService.getStockLots(articleId);
+    } catch (error) {
+      console.error('Erreur lors de la vérification du stock:', error);
+      return [];
+    }
   }
 }

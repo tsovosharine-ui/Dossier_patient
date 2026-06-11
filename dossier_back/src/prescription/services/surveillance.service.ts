@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PrescriptionSurveillance } from '../entities/prescription-surveillance.entity';
 import { ParametreSurveillance } from '../entities/parametre-surveillance.entity';
+import { PlanningService } from '../../planning/planning.service';
 
 @Injectable()
 export class SurveillanceService {
@@ -11,11 +12,12 @@ export class SurveillanceService {
     private prescriptionRepo: Repository<PrescriptionSurveillance>,
     @InjectRepository(ParametreSurveillance)
     private parametreRepo: Repository<ParametreSurveillance>,
+    private planningService: PlanningService,
   ) {}
 
   async create(prescripteurId: string, dto: any) {
     const { parametres, ...rest } = dto;
-    
+
     const prescription = this.prescriptionRepo.create({
       ...rest,
       prescripteurId,
@@ -34,17 +36,32 @@ export class SurveillanceService {
           frequenceStr = 'Si besoin (SOS)';
         else if (p.frequenceType === 'CONTINU') frequenceStr = 'En continu';
 
+        const intervalleMinutes = this.planningService.parseFrequence(frequenceStr);
+        const dureeJours = p.dureeJours || this.planningService.parseDuree(p.duree);
+
         return this.parametreRepo.save({
           ...p,
           prescriptionId: savedPrescription.id,
           duree: p.dureeJours ? `${p.dureeJours} jours` : null,
           frequence: frequenceStr,
           details: p.details || null,
+          intervalleMinutes,
+          dureeJours,
+          dateDebutEffective: p.dateDebut ? new Date(p.dateDebut) : new Date(),
+          planningActif: true,
         });
       }),
     );
 
-    return this.findOne(savedPrescription.id);
+    // Generate planning for each parameter
+    const prescriptionWithParametres = await this.findOne(savedPrescription.id);
+    for (const parametre of prescriptionWithParametres.parametres) {
+      if (parametre.intervalleMinutes && parametre.planningActif) {
+        await this.planningService.generatePlanningSurveillance(parametre.id);
+      }
+    }
+
+    return prescriptionWithParametres;
   }
 
   async findAll() {

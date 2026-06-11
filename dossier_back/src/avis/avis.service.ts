@@ -6,6 +6,8 @@ import { CreateDemandeAvisDto } from './dto/create-demande-avis.dto';
 import { RepondreAvisDto } from './dto/repondre-avis.dto';
 import { HistoriqueService } from '../historique/historique.service';
 import { TypeAction } from '../historique/entities/historique.entity';
+import { NotificationApiService } from '../notification-api/notification-api.service';
+import { ChuService } from '../chu/chu.service';
 
 @Injectable()
 export class AvisService {
@@ -13,6 +15,8 @@ export class AvisService {
     @InjectRepository(DemandeAvis)
     private demandeRepo: Repository<DemandeAvis>,
     private historiqueService: HistoriqueService,
+    private notificationApiService: NotificationApiService,
+    private chuService: ChuService,
   ) {}
 
   async create(patientId: string, dto: CreateDemandeAvisDto): Promise<DemandeAvis> {
@@ -33,6 +37,38 @@ export class AvisService {
       commentaire: `Demande d'avis envoyée au service ${dto.serviceDestinataire}`,
       utilisateur: dto.serviceDemandeur,
     });
+
+    // Envoyer notification via le service externe avec les infos réelles du CHU
+    try {
+      const chuInfo = await this.chuService.getChuInfo();
+      // Récupérer le service demandeur dynamiquement
+      let serviceInfo = await this.chuService.getServiceByName(dto.serviceDemandeur);
+      // Si le service n'est pas trouvé, utiliser le service par défaut (Chirurgie)
+      if (!serviceInfo) {
+        serviceInfo = await this.chuService.getServiceInfo();
+      }
+
+      await this.notificationApiService.createNotification({
+        type: 'DEMANDE_AVIS',
+        motif: `Demande d'avis: ${dto.motif}`,
+        sourceServiceId: serviceInfo.serviceId,
+        sourceServiceName: `${chuInfo.name} - ${serviceInfo.name}`,
+        targetServiceId: `service-${dto.serviceDestinataire.toLowerCase().replace(/\s+/g, '-')}`,
+        targetServiceName: dto.serviceDestinataire,
+        emitterId: dto.serviceDemandeur,
+        emitterName: dto.serviceDemandeur,
+        recipientName: dto.serviceDestinataire,
+        departmentSource: `${chuInfo.name} - ${serviceInfo.name}`,
+        departmentTarget: dto.serviceDestinataire,
+        patientId: patientId,
+        entiteRefType: 'DemandeAvis',
+        entiteRefId: saved.id,
+        urgence: 3,
+        channels: ['WEB', 'SOUND'],
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi de la notification:', error);
+    }
 
     return saved;
   }
