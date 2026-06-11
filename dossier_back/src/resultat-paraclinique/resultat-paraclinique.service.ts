@@ -6,7 +6,7 @@ import { CreateResultatParacliniqueDto } from './dto/create-resultat-paracliniqu
 import { UpdateResultatParacliniqueDto } from './dto/update-resultat-paraclinique.dto';
 import { HistoriqueService } from '../historique/historique.service';
 import { TypeAction } from '../historique/entities/historique.entity';
-import { NotificationApiService } from '../notification-api/notification-api.service';
+import { DossierNotifierService } from '../notification-api/dossier-notifier.service';
 
 @Injectable()
 export class ResultatParacliniqueService {
@@ -14,7 +14,7 @@ export class ResultatParacliniqueService {
     @InjectRepository(ResultatParaclinique)
     private resultatRepo: Repository<ResultatParaclinique>,
     private historiqueService: HistoriqueService,
-    private notificationApiService: NotificationApiService,
+    private dossierNotifierService: DossierNotifierService,
   ) {}
 
   async create(createDto: CreateResultatParacliniqueDto): Promise<ResultatParaclinique> {
@@ -77,26 +77,7 @@ export class ResultatParacliniqueService {
 
     // Envoyer notification si le résultat est disponible (statut change vers DISPONIBLE)
     if (updateDto.statut && updateDto.statut === StatutResultat.DISPONIBLE) {
-      try {
-        await this.notificationApiService.createNotification({
-          type: 'RESULTAT_EXAMEN',
-          motif: `Résultat d'examen disponible: ${resultat.type}`,
-          sourceServiceId: 'service-laboratoire',
-          sourceServiceName: 'Laboratoire',
-          targetServiceId: 'service-medical',
-          targetServiceName: 'Service Médical',
-          emitterId: 'laboratoire',
-          emitterName: 'Laboratoire',
-          recipientName: 'Service Médical',
-          patientId: patientId,
-          entiteRefType: 'ResultatParaclinique',
-          entiteRefId: saved.id,
-          urgence: 2,
-          channels: ['WEB', 'SOUND'],
-        });
-      } catch (error) {
-        console.error('Erreur lors de l\'envoi de la notification:', error);
-      }
+      this.dossierNotifierService.notifyResultatParaclinique(saved, patientId);
     }
 
     return saved;

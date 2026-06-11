@@ -20,36 +20,9 @@ export class DialyseService {
     const prescription = this.repo.create({ ...dto, prescripteurId });
     const savedPrescription = await this.repo.save(prescription) as unknown as PrescriptionDialyse;
 
-    // Send to external dialysis API if configured
+    // Send to external dialysis API if configured (asynchrone)
     if (process.env.DIALYSE_API_URL) {
-      try {
-        // First, try to find or create the patient in the dialyse system
-        let dialysePatient = await this.dialyseApiService.getPatientByExternalId(savedPrescription.patientId);
-        
-        if (!dialysePatient) {
-          // Create patient if not found
-          dialysePatient = await this.dialyseApiService.createPatient({
-            nom: dto.patientNom || 'Patient',
-            prenom: dto.patientPrenom || '',
-            dateNaissance: dto.patientDateNaissance,
-            telephone: dto.patientTelephone,
-            notes: dto.patientNotes,
-            external_patient_id: savedPrescription.patientId,
-          });
-        }
-
-        // Create prescription in dialyse system
-        await this.dialyseApiService.createPrescription({
-          patientId: dialysePatient.id,
-          medicament: dto.type || 'Dialyse',
-          dosage: dto.frequence || '',
-          frequence: dto.duree || '',
-          date_prescription: new Date().toISOString().split('T')[0],
-          workflow_statut: 'actif',
-        });
-      } catch (error) {
-        console.error('Erreur lors de l\'envoi à l\'API dialyse:', error);
-      }
+      this.processDialyseIntegration(savedPrescription, dto).catch(e => console.error('Erreur asynchrone API dialyse:', e));
     }
 
     // Create notification
@@ -89,5 +62,33 @@ export class DialyseService {
 
   async updateStatut(id: string, statut: string) {
     return this.repo.update(id, { statut });
+  }
+
+  private async processDialyseIntegration(savedPrescription: any, dto: any) {
+    try {
+      let dialysePatient = await this.dialyseApiService.getPatientByExternalId(savedPrescription.patientId);
+      
+      if (!dialysePatient) {
+        dialysePatient = await this.dialyseApiService.createPatient({
+          nom: dto.patientNom || 'Patient',
+          prenom: dto.patientPrenom || '',
+          dateNaissance: dto.patientDateNaissance,
+          telephone: dto.patientTelephone,
+          notes: dto.patientNotes,
+          external_patient_id: savedPrescription.patientId,
+        });
+      }
+
+      await this.dialyseApiService.createPrescription({
+        patientId: dialysePatient.id,
+        medicament: dto.type || 'Dialyse',
+        dosage: dto.frequence || '',
+        frequence: dto.duree || '',
+        date_prescription: new Date().toISOString().split('T')[0],
+        workflow_statut: 'actif',
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi à l\'API dialyse:', error);
+    }
   }
 }

@@ -155,7 +155,7 @@ export default function SurveillanceForm({ patient, prescripteur }: Props) {
 
   async function terminerPrescription(id: string) {
     try {
-      await apiTerminerPrescription(id, patient.id);
+      await apiTerminerPrescription('surveillance', id);
       await refreshPrescriptions();
     } catch { console.error('Erreur terminaison'); }
   }

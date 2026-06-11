@@ -10,6 +10,15 @@ export class CreatePrescriptionDialyseDto {
   @IsNotEmpty()
   prescripteurId: string;
 
+  @ApiProperty({
+    description: 'Identifiant du patient',
+    example: 'IP-2026-00001',
+  })
+  @IsString()
+  @IsNotEmpty()
+  patientId: string;
+
+
   @ApiPropertyOptional({
     description: 'Type de dialyse',
     example: 'hémodialyse',

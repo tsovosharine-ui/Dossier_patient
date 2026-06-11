@@ -166,7 +166,7 @@ export default function NonMedicaleForm({ patient, prescripteur }: Props) {
 
   async function terminerPrescription(id: string) {
     try {
-      await apiTerminerPrescription(id, patient.id);
+      await apiTerminerPrescription('non-medicale', id);
       await refreshPrescriptions();
     } catch { console.error('Erreur terminaison'); }
   }

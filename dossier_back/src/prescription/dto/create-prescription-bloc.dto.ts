@@ -11,6 +11,15 @@ export class CreatePrescriptionBlocDto {
   prescripteurId: string;
 
   @ApiProperty({
+    description: 'Identifiant du patient',
+    example: 'IP-2026-00001',
+  })
+  @IsString()
+  @IsNotEmpty()
+  patientId: string;
+
+
+  @ApiProperty({
     description: 'Type d\'intervention',
     example: 'chirurgie',
     enum: ['chirurgie', 'endoscopie', 'radiologie interventionnelle'],

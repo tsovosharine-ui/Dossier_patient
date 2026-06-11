@@ -353,7 +353,7 @@ export default function MedicaleForm({ patient, prescripteur }: Props) {
 
   async function terminerPrescription(id: string) {
     try {
-      await apiTerminerPrescription(id, patient.id);
+      await apiTerminerPrescription('medicale', id);
       await refreshPrescriptionsEnCours();
     } catch {
       console.error('Erreur terminaison prescription');

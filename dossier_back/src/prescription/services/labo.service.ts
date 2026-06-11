@@ -24,11 +24,11 @@ export class LaboService {
         apiUrl: process.env.LABO_API_URL,
         endpoint: '/prescriptions',
       };
-      await this.integrationService.sendToExternalApi(config, {
+      this.integrationService.sendToExternalApi(config, {
         prescriptionId: savedPrescription.id,
         patientId: savedPrescription.patientId,
         analyses: dto.analyses,
-      });
+      }).catch(e => console.error('Erreur integration externe:', e));
     }
 
     // Create notification

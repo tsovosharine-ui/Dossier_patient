@@ -5,6 +5,7 @@ import { Suivi } from './suivi.entity';
 import { CreateSuiviDto } from './dto/create-suivi.dto';
 import { HistoriqueService } from '../historique/historique.service';
 import { TypeAction } from '../historique/entities/historique.entity';
+import { DossierNotifierService } from '../notification-api/dossier-notifier.service';
 
 @Injectable()
 export class SuiviService {
@@ -12,6 +13,7 @@ export class SuiviService {
     @InjectRepository(Suivi)
     private readonly repo: Repository<Suivi>,
     private historiqueService: HistoriqueService,
+    private dossierNotifierService: DossierNotifierService,
   ) {}
 
   async findAllByPatient(patientId: string): Promise<Suivi[]> {
@@ -33,6 +35,8 @@ export class SuiviService {
       commentaire: 'Ajout d\'une nouvelle entrée de suivi ou de soin',
       utilisateur: dto.auteur || 'Personnel soignant',
     });
+
+    this.dossierNotifierService.notifySuivi(saved, patientId);
 
     return saved;
   }

@@ -24,11 +24,11 @@ export class ImagerieService {
         apiUrl: process.env.IMAGERIE_API_URL,
         endpoint: '/prescriptions',
       };
-      await this.integrationService.sendToExternalApi(config, {
+      this.integrationService.sendToExternalApi(config, {
         prescriptionId: savedPrescription.id,
         patientId: savedPrescription.patientId,
         examens: dto.examens,
-      });
+      }).catch(e => console.error('Erreur integration externe:', e));
     }
 
     // Create notification

@@ -52,17 +52,17 @@ export class MedicaleService {
       }),
     );
 
-    // Send to external pharmacy API if configured
+    // Send to external pharmacy API if configured (fire-and-forget)
     if (process.env.PHARMACY_API_URL) {
       const config: IntegrationConfig = {
         apiUrl: process.env.PHARMACY_API_URL,
         endpoint: '/prescriptions',
       };
-      await this.integrationService.sendToExternalApi(config, {
+      this.integrationService.sendToExternalApi(config, {
         prescriptionId: savedPrescription.id,
         patientId: savedPrescription.patientId,
         medicaments,
-      });
+      }).catch(e => console.error('Erreur API Pharmacie:', e));
     }
 
     // Create notification and generate planning only if notifierInfirmier is true
@@ -128,7 +128,26 @@ export class MedicaleService {
     // Récupérer la prescription pour obtenir les informations nécessaires
     const prescription = await this.findOne(prescriptionId);
 
-    // Envoyer l'ordonnance à l'API pharmacie
+    // Process pharmacy integration asynchronously
+    this.processPharmacieIntegration(prescription, prescriptionId, medicaments, savedOrdonnance.id)
+      .catch(e => console.error('Erreur asynchrone integration pharmacie:', e));
+
+    return savedOrdonnance;
+  }
+
+  async updateStatut(id: string, statut: string) {
+    // Mettre à jour le statut localement
+    await this.prescriptionRepo.update(id, { statut });
+
+    // Synchroniser avec l'API pharmacie (asynchrone)
+    this.pharmacieService.updatePrescriptionStatus(id, statut)
+      .catch(error => console.error('Erreur lors de la synchronisation du statut avec l\'API pharmacie:', error));
+
+    return this.prescriptionRepo.update(id, { statut });
+  }
+
+
+  private async processPharmacieIntegration(prescription: any, prescriptionId: string, medicaments: any[], ordonnanceId: string) {
     try {
       await this.pharmacieService.createOrdonnance(prescriptionId, {
         patientId: prescription.patientId,
@@ -138,7 +157,6 @@ export class MedicaleService {
         prescripteur: prescription.prescripteurId,
       });
 
-      // Envoyer une notification à l'API pharmacie
       await this.pharmacieService.sendNotification({
         type: 'ORDONNANCE',
         motif: `Nouvelle ordonnance pour le patient ${prescription.patientId}`,
@@ -146,12 +164,11 @@ export class MedicaleService {
         scope: 'pharmacie',
         data: {
           prescriptionId: prescriptionId,
-          ordonnanceId: savedOrdonnance.id,
+          ordonnanceId: ordonnanceId,
           patientId: prescription.patientId,
         },
       });
 
-      // Update sync status
       await this.prescriptionRepo.update(prescriptionId, {
         statutSync: 'SUCCES',
         syncedAt: new Date(),
@@ -164,22 +181,6 @@ export class MedicaleService {
         syncedAt: new Date(),
       });
     }
-
-    return savedOrdonnance;
-  }
-
-  async updateStatut(id: string, statut: string) {
-    // Mettre à jour le statut localement
-    await this.prescriptionRepo.update(id, { statut });
-
-    // Synchroniser avec l'API pharmacie
-    try {
-      await this.pharmacieService.updatePrescriptionStatus(id, statut);
-    } catch (error) {
-      console.error('Erreur lors de la synchronisation du statut avec l\'API pharmacie:', error);
-    }
-
-    return this.prescriptionRepo.update(id, { statut });
   }
 
   // Rechercher des médicaments via l'API pharmacie

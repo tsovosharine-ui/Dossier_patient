@@ -4,11 +4,13 @@ import { Suivi } from './suivi.entity';
 import { SuiviService } from './suivi.service';
 import { SuiviController } from './suivi.controller';
 import { HistoriqueModule } from '../historique/historique.module';
+import { NotificationApiModule } from '../notification-api/notification-api.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Suivi]),
-    HistoriqueModule
+    HistoriqueModule,
+    NotificationApiModule
   ],
   providers: [SuiviService],
   controllers: [SuiviController],

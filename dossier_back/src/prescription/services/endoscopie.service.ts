@@ -24,13 +24,13 @@ export class EndoscopieService {
         apiUrl: process.env.ENDOSCOPIE_API_URL,
         endpoint: '/prescriptions',
       };
-      await this.integrationService.sendToExternalApi(config, {
+      this.integrationService.sendToExternalApi(config, {
         prescriptionId: savedPrescription.id,
         patientId: savedPrescription.patientId,
         type: dto.type,
         priorite: dto.priorite,
         indications: dto.indications,
-      });
+      }).catch(e => console.error('Erreur integration externe:', e));
     }
 
     // Create notification

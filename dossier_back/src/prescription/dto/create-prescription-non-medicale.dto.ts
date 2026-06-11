@@ -11,6 +11,15 @@ export class CreatePrescriptionNonMedicaleDto {
   prescripteurId: string;
 
   @ApiProperty({
+    description: 'Identifiant du patient',
+    example: 'IP-2026-00001',
+  })
+  @IsString()
+  @IsNotEmpty()
+  patientId: string;
+
+
+  @ApiProperty({
     description: 'Type de prescription non médicale',
     example: ' régime',
     enum: ['régime', 'hydratation', 'repos', 'mobilisation', 'autres'],

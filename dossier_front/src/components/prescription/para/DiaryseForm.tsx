@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
-import { openSummaryWindow } from '@/lib/printPrescription';
+import { useState, useEffect } from "react";
 import { creerPrescriptionDialyse } from '@/lib/prescriptionApi';
+import { fetchRendezVousDialyse, getOrCreatePatientInDialyse, creerRendezVousDialyse } from '@/lib/dialyseRdvApi';
 
 type Urgence = "n" | "u" | "tu";
 const urgenceClasses: Record<Urgence, string> = { n: "un", u: "uu", tu: "utu" };
@@ -23,6 +23,24 @@ function calcAge(dateNaissance?: string): number | null {
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
 }
 
+interface ValidatedPrescription {
+  urgence: Urgence;
+  alertes: string;
+  renseignements: string;
+  dialType: string;
+  remarques: string;
+  rdv: { date: string; heure: string } | null;
+  patient: Props["patient"] & { age: number | null };
+  prescripteur: Props["prescripteur"];
+  date: string;
+}
+
+interface RendezVous {
+  date_heure: string;
+  machine: string;
+  [key: string]: any;
+}
+
 export default function DiaryseForm({ patient, prescripteur }: Props) {
   const [urgence, setUrgence] = useState<Urgence>("n"); const [alertes, setAlertes] = useState("");
   const [renseignements, setRenseign] = useState(""); const [dialType, setDialType] = useState("");
@@ -30,41 +48,80 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
   const [toast, setToast] = useState(""); const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   const [showValidationModal, setShowValidationModal] = useState(false);
-  const [validatedPrescription, setValidatedPrescription] = useState<any>(null);
+  const [validatedPrescription, setValidatedPrescription] = useState<ValidatedPrescription | null>(null);
+
+  // Nouveaux states pour le RDV
+  const [rdvDate, setRdvDate] = useState("");
+  const [rdvHeure, setRdvHeure] = useState("");
+  const [rdvs, setRdvs] = useState<RendezVous[]>([]);
+
+  useEffect(() => {
+    fetchRendezVousDialyse().then(setRdvs).catch(() => {});
+  }, []);
+
+  const getDisponibilites = (dateStr: string) => {
+    if (!dateStr) return [];
+    const targetDate = new Date(dateStr).toISOString().split('T')[0];
+    const rdvsDuJour = rdvs.filter(r => r.date_heure.startsWith(targetDate));
+
+    const slots = ['08:00', '13:00', '17:00'];
+    return slots.map(heure => {
+      const rdvsPourCeCreneau = rdvsDuJour.filter(r => r.date_heure.includes(`T${heure}`));
+      return {
+        heure,
+        disponible: rdvsPourCeCreneau.length < 3,
+        places: 3 - rdvsPourCeCreneau.length
+      };
+    });
+  };
+  const disponibilites = getDisponibilites(rdvDate);
 
   const age = calcAge(patient?.dateNaissance);
-  const sexeLabel = patient?.sexe === 'M' ? 'Masculin' : patient?.sexe === 'F' ? 'Féminin' : patient?.sexe;
 
   const isFormValid = !!renseignements.trim() && !!dialType;
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2800); }
-
-  function buildDialyseSummary(): string {
-    const now = new Date().toLocaleString('fr-FR');
-    let html = `<div class="card"><div class="patient">Date : ${now}</div>`;
-    html += `<div class="medicament"><span class="nom">Type :</span> <span class="detail">${dialType}</span></div>`;
-    if (renseignements) html += `<div class="medicament"><span class="nom">Renseignements :</span> <span class="detail">${renseignements}</span></div>`;
-    if (remarques) html += `<div class="notice">📌 ${remarques}</div>`;
-    if (alertes) html += `<div class="notice">⚠️ ${alertes}</div>`;
-    html += `</div>`;
-    return html;
-  }
 
   async function handleSubmit() {
     setShowModal(false); setLoading(true); setApiError("");
     try {
       await creerPrescriptionDialyse({ patientId: patient.id, prescripteurId: prescripteur.id, urgence, alertes, renseignements, typeDialyse: dialType, remarques });
+      
+      let createdRdv = null;
+      if (rdvDate && rdvHeure) {
+        try {
+          const dialysePatientId = await getOrCreatePatientInDialyse(patient);
+          const targetDate = new Date(rdvDate).toISOString().split('T')[0];
+          const rdvsCeCreneau = rdvs.filter(r => r.date_heure.startsWith(targetDate) && r.date_heure.includes(`T${rdvHeure}`));
+          const machinesPrises = rdvsCeCreneau.map(r => r.machine);
+          const machines = ['Machine 1', 'Machine 2', 'Machine 3'];
+          const machineLibre = machines.find(m => !machinesPrises.includes(m)) || 'Machine 1';
+
+          const dateHeure = new Date(`${rdvDate}T${rdvHeure}`);
+          createdRdv = await creerRendezVousDialyse({
+            patientId: dialysePatientId,
+            date_heure: dateHeure.toISOString(),
+            motif: `Séance dialyse (${dialType})`,
+            statut: 'planifié',
+            machine: machineLibre
+          });
+        } catch (e) {
+          console.error("Erreur création RDV:", e);
+        }
+      }
+
       setValidatedPrescription({
         urgence,
         alertes,
         renseignements,
         dialType,
         remarques,
+        rdv: createdRdv ? { date: rdvDate, heure: rdvHeure } : null,
         patient: { ...patient, age },
         prescripteur,
         date: new Date().toLocaleString('fr-FR'),
       });
       setShowValidationModal(true);
-      showToast("Prescription dialyse transmise"); setUrgence("n"); setAlertes(""); setRenseign(""); setDialType(""); setRemarques("");
+      showToast("Prescription dialyse transmise"); setUrgence("n"); setAlertes(""); setRenseign(""); setDialType(""); setRemarques(""); setRdvDate(""); setRdvHeure("");
     } catch { setApiError("Erreur lors de l'envoi."); }
     finally { setLoading(false); }
   }
@@ -78,8 +135,26 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
           <div className="card" style={{ padding: 12 }}><div className="mb12"><label className="lbl">Type de dialyse <span className="req">*</span></label><div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>{DIALYSE_TYPES.map(t => <label key={t} className="rc"><input type="radio" name="dial-type" checked={dialType===t} onChange={()=>setDialType(t)} style={{accentColor:"var(--navy)"}}/><span>{t}</span></label>)}</div></div></div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="card" style={{ padding: 8 }}><label className="lbl">Degré d'urgence <span className="req">*</span></label><div className={`urgr ${urgenceClasses[urgence]}`} style={{ marginBottom:8 }}><div className="urgd" /><select className="urgs" value={urgence} onChange={e => setUrgence(e.target.value as Urgence)}><option value="n">Normal</option><option value="u">Urgent</option><option value="tu">STAT</option></select></div><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><span className="ms" style={{fontSize:16,color:"var(--red)"}}>warning</span><span className="lbl" style={{margin:0}}>Précautions &amp; Alertes</span></div><textarea rows={1} value={alertes} onChange={e => setAlertes(e.target.value)} placeholder="Accès vasculaire..." style={{background:"var(--red-lt)",border:"1.5px solid var(--red-bdr)",padding:'8px 12px'}} /></div>
+          <div className="card" style={{ padding: 8 }}><label className="lbl">Degré d&apos;urgence <span className="req">*</span></label><div className={`urgr ${urgenceClasses[urgence]}`} style={{ marginBottom:8 }}><div className="urgd" /><select className="urgs" value={urgence} onChange={e => setUrgence(e.target.value as Urgence)}><option value="n">Normal</option><option value="u">Urgent</option><option value="tu">STAT</option></select></div><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><span className="ms" style={{fontSize:16,color:"var(--red)"}}>warning</span><span className="lbl" style={{margin:0}}>Précautions &amp; Alertes</span></div><textarea rows={1} value={alertes} onChange={e => setAlertes(e.target.value)} placeholder="Accès vasculaire..." style={{background:"var(--red-lt)",border:"1.5px solid var(--red-bdr)",padding:'8px 12px'}} /></div>
           <div className="card" style={{ padding: 12 }}><label className="lbl">Autres remarques</label><textarea rows={3} value={remarques} onChange={e => setRemarques(e.target.value)} placeholder="Durée, débit..." /></div>
+          
+          <div className="card" style={{ padding: 12 }}>
+            <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              📅 Planifier le premier rendez-vous <span style={{fontSize: 10, fontWeight: 'normal', color: 'var(--txt2)'}}>(Optionnel)</span>
+            </label>
+            <input type="date" value={rdvDate} onChange={e => { setRdvDate(e.target.value); setRdvHeure(""); }} style={{ width: '100%', padding: 8, border: '1px solid var(--bdr)', borderRadius: 8, marginBottom: 8, outline: 'none' }} min={new Date().toISOString().split('T')[0]} />
+            {rdvDate && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {disponibilites.map(d => (
+                  <button key={d.heure} onClick={() => d.disponible && setRdvHeure(d.heure)} className="bp" style={{ flex: 1, minWidth: 80, margin: 0, padding: '8px 4px', background: rdvHeure === d.heure ? 'var(--navy)' : d.disponible ? 'var(--navy-lt)' : 'var(--bg)', color: rdvHeure === d.heure ? '#fff' : d.disponible ? 'var(--navy)' : 'var(--txt3)', border: `1px solid ${rdvHeure === d.heure ? 'var(--navy)' : d.disponible ? 'var(--navy)' : 'var(--bdr)'}`, opacity: d.disponible ? 1 : 0.5, pointerEvents: d.disponible ? 'auto' : 'none' }}>
+                    <div style={{ fontSize: 13, fontWeight: 'bold' }}>{d.heure}</div>
+                    <div style={{ fontSize: 10 }}>{d.disponible ? `${d.places} place(s)` : 'Complet'}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button className="bp" onClick={() => setShowModal(true)} style={{ opacity: isFormValid && !loading ? 1 : 0.5, pointerEvents: isFormValid && !loading ? "auto" : "none", marginTop:0 }}><span className="ms">check_circle</span>{loading ? "Envoi..." : "Valider la prescription"}</button>
         </div>
       </div>
@@ -152,7 +227,7 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
 
               {/* Urgence */}
               <div style={{ background: validatedPrescription.urgence === 'n' ? '#dcfce7' : validatedPrescription.urgence === 'u' ? '#fef3c7' : '#fee2e2', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b', marginBottom: 4 }}>Degré d'urgence</div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b', marginBottom: 4 }}>Degré d&apos;urgence</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: validatedPrescription.urgence === 'n' ? '#166534' : validatedPrescription.urgence === 'u' ? '#92400e' : '#991b1b' }}>{validatedPrescription.urgence === 'n' ? 'Normal' : validatedPrescription.urgence === 'u' ? 'Urgent' : 'STAT'}</div>
               </div>
 
@@ -169,6 +244,16 @@ export default function DiaryseForm({ patient, prescripteur }: Props) {
                 <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--txt3)', marginBottom: 4 }}>Remarques</div>
                   <div style={{ fontSize: 13, color: 'var(--txt)' }}>{validatedPrescription.remarques}</div>
+                </div>
+              )}
+
+              {validatedPrescription.rdv && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span className="ms" style={{ fontSize: 18, color: '#166534' }}>calendar_month</span>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#166534' }}>Rendez-vous planifié</div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#166534' }}>Le {new Date(validatedPrescription.rdv.date).toLocaleDateString('fr-FR')} à {validatedPrescription.rdv.heure}</div>
                 </div>
               )}
 
