@@ -12,34 +12,11 @@ import { SuiviModule } from './suivi/suivi.module';
 import { ResultatParacliniqueModule } from './resultat-paraclinique/resultat-paraclinique.module';
 import { HistoriqueModule } from './historique/historique.module';
 import { AvisModule } from './avis/avis.module';
-import { PrescriptionModule } from './prescription/prescription.module';
-import { IntegrationModule } from './integration/integration.module';
-import { PlanningModule } from './planning/planning.module';
 import { NotificationApiModule } from './notification-api/notification-api.module';
 import { ChuModule } from './chu/chu.module';
 import { PatientSyncInterceptor } from './patient/patient-sync.interceptor';
 import { PatientService } from './patient/patient.service';
 import { Patient } from './patient/entities/patient.entity';
-import { PrescriptionMedicale } from './prescription/entities/prescription-medicale.entity';
-import { Medicament } from './prescription/entities/medicament.entity';
-import { Ordonnance } from './prescription/entities/ordonnance.entity';
-import { PrescriptionNonMedicale } from './prescription/entities/prescription-non-medicale.entity';
-import { ItemNonMedical } from './prescription/entities/item-non-medical.entity';
-import { PrescriptionSurveillance } from './prescription/entities/prescription-surveillance.entity';
-import { ParametreSurveillance } from './prescription/entities/parametre-surveillance.entity';
-import { PrescriptionTransfusion } from './prescription/entities/prescription-transfusion.entity';
-import { PrescriptionBloc } from './prescription/entities/prescription-bloc.entity';
-import { PrescriptionLabo } from './prescription/entities/prescription-labo.entity';
-import { PrescriptionImagerie } from './prescription/entities/prescription-imagerie.entity';
-import { PrescriptionAnapath } from './prescription/entities/prescription-anapath.entity';
-import { PrescriptionEEG } from './prescription/entities/prescription-eeg.entity';
-import { PrescriptionKine } from './prescription/entities/prescription-kine.entity';
-import { PrescriptionDialyse } from './prescription/entities/prescription-dialyse.entity';
-import { PrescriptionEndoscopie } from './prescription/entities/prescription-endoscopie.entity';
-import { PriseMedicament } from './prescription/entities/prise-medicament.entity';
-import { Notification } from './prescription/entities/notification.entity';
-import { TacheNonMedicale } from './prescription/entities/tache-non-medicale.entity';
-import { SurveillanceParametre } from './prescription/entities/surveillance-parametre.entity';
 
 @Module({
   imports: [
@@ -58,26 +35,6 @@ import { SurveillanceParametre } from './prescription/entities/surveillance-para
     }),
     TypeOrmModule.forFeature([
       Patient,
-      PrescriptionMedicale,
-      Medicament,
-      Ordonnance,
-      PrescriptionNonMedicale,
-      ItemNonMedical,
-      PrescriptionSurveillance,
-      ParametreSurveillance,
-      PrescriptionTransfusion,
-      PrescriptionBloc,
-      PrescriptionLabo,
-      PrescriptionImagerie,
-      PrescriptionAnapath,
-      PrescriptionEEG,
-      PrescriptionKine,
-      PrescriptionDialyse,
-      PrescriptionEndoscopie,
-      PriseMedicament,
-      Notification,
-      TacheNonMedicale,
-      SurveillanceParametre,
     ]),
     PatientModule,
     ObservationModule,
@@ -88,9 +45,6 @@ import { SurveillanceParametre } from './prescription/entities/surveillance-para
     ResultatParacliniqueModule,
     HistoriqueModule,
     AvisModule,
-    PrescriptionModule,
-    IntegrationModule,
-    PlanningModule,
     NotificationApiModule,
     ChuModule,
   ],
