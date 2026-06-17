@@ -43,7 +43,7 @@ const SERVICES_CHU = [
   'Pharmacie',
 ];
 
-export function AvisTab({ patientId, serviceCourant }: { patientId: string; serviceCourant: string }) {
+export function AvisTab({ patientId, serviceCourant, readOnly = false }: { patientId: string; serviceCourant: string; readOnly?: boolean }) {
   const [demandes, setDemandes] = useState<DemandeAvis[]>([]);
   const [destinataire, setDestinataire] = useState('');
   const [motif, setMotif] = useState('');
@@ -148,10 +148,16 @@ export function AvisTab({ patientId, serviceCourant }: { patientId: string; serv
           Nouvelle demande d'avis
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: ehr.text, display: 'block', marginBottom: 6 }}>
-            Service destinataire <span style={{ color: ehr.danger }}>*</span>
-          </label>
+        {readOnly ? (
+          <div style={{ marginBottom: 16, padding: '14px 16px', backgroundColor: '#f8fafc', border: `1px solid ${ehr.border}`, borderRadius: 10, color: ehr.textMuted, fontSize: 13 }}>
+            En mode consultation, vous pouvez répondre à la demande d'avis depuis la liste ci-dessous, mais vous ne pouvez pas créer une nouvelle demande depuis cette page.
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: ehr.text, display: 'block', marginBottom: 6 }}>
+                Service destinataire <span style={{ color: ehr.danger }}>*</span>
+              </label>
           <select
             value={destinataire}
             onChange={e => setDestinataire(e.target.value)}
@@ -211,6 +217,8 @@ export function AvisTab({ patientId, serviceCourant }: { patientId: string; serv
           <Send size={15} strokeWidth={2} />
           {loading ? 'Envoi en cours...' : 'Envoyer la demande'}
         </button>
+      </>
+    )}
       </div>
 
       {/* Liste des demandes */}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
 
 interface Props {
@@ -25,6 +26,7 @@ function urgenceDot(contenu: any) {
 }
 
 export default function NotificationBell({ userId, service }: Props) {
+  const router = useRouter();
   const { notifications, connected, unreadCount, markAsRead, markAllAsRead } = useNotifications(userId, service);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -173,6 +175,27 @@ export default function NotificationBell({ userId, service }: Props) {
                       <p style={{ fontSize: 10, color: 'var(--txt3)', margin: '3px 0 0' }}>
                         {timeAgo(n.createdAt)}
                       </p>
+                      {n.entiteRefType === 'DemandeAvis' && n.entiteRefId && n.patientId && (
+                        <button
+                          onClick={() => {
+                            markAsRead(n.id);
+                            router.push(`/patients/${n.patientId}?tab=avis&readonly=1`);
+                            setOpen(false);
+                          }}
+                          style={{
+                            marginTop: 10,
+                            color: '#1d4ed8',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: 0,
+                          }}
+                        >
+                          Ouvrir la demande et consulter le dossier
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

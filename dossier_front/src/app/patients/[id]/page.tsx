@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { fetchPatient } from '@/lib/api';
 import { ObservationForm } from '@/components/DossierPatient/ObservationForm';
 import { PrescriptionsTab } from '@/components/DossierPatient/PrescriptionsTab';
@@ -40,8 +40,13 @@ const NAV_ITEMS = [
 
 export default function DossierPatientPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [patient, setPatient] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('observation');
+
+  const requestedTab = searchParams?.get('tab')?.toLowerCase() || 'observation';
+  const readOnlyMode = searchParams?.get('readonly') === '1' || searchParams?.get('readonly') === 'true';
+  const [activeTab, setActiveTab] = useState(() => (readOnlyMode ? 'avis' : requestedTab));
+  const displayTab = readOnlyMode ? 'avis' : activeTab;
 
   useEffect(() => {
     if (id) {
@@ -150,20 +155,26 @@ export default function DossierPatientPage() {
             {/* Onglets */}
             <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', backgroundColor: 'white' }}>
-                {TABS.map(tab => (
+                {TABS.map(tab => {
+                const disabled = readOnlyMode && tab.key !== 'avis';
+                return (
                   <button
                     key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => { if (!disabled) setActiveTab(tab.key); }}
+                    disabled={disabled}
                     style={{
                       padding: '14px 20px', fontSize: '13px', fontWeight: activeTab === tab.key ? 600 : 400,
-                      color: activeTab === tab.key ? '#1d4ed8' : '#64748b', borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                      color: activeTab === tab.key ? '#1d4ed8' : disabled ? '#94a3b8' : '#64748b',
+                      borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                       borderBottom: activeTab === tab.key ? '2px solid #1d4ed8' : '2px solid transparent',
-                      background: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", flexShrink: 0,
+                      background: 'none', cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", flexShrink: 0,
+                      opacity: disabled ? 0.55 : 1,
                     }}
                   >
                     {tab.label}
                   </button>
-                ))}
+                );
+              })}
               </div>
 
               <div style={{ padding: '24px' }}>
@@ -175,7 +186,7 @@ export default function DossierPatientPage() {
                 {activeTab === 'resultats'     && <ResultatsParacliniquesTab patientId={patient.id} />}
                 {activeTab === 'sortie'        && <SortieTab patientId={patient.id} />}
                 {activeTab === 'historique'    && <HistoriqueTab patientId={patient.id} />}
-                {activeTab === 'avis'          && <AvisTab patientId={patient.id} serviceCourant="Chirurgie" />}
+                {activeTab === 'avis'          && <AvisTab patientId={patient.id} serviceCourant="Chirurgie" readOnly={readOnlyMode} />}
               </div>
             </div>
           </div>

@@ -6,6 +6,8 @@ export interface Notification {
   type: string;
   statut: string;
   patientId?: string;
+  entiteRefType?: string;
+  entiteRefId?: string;
   contenu?: any;
   read: boolean;
   createdAt: string;
