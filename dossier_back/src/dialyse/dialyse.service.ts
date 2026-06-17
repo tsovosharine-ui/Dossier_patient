@@ -12,7 +12,8 @@ export class DialyseService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    this.apiUrl = this.configService.get<string>('DIALYSE_API_URL') || 'https://chu-dialyse.onrender.com/api';
+    const rawUrl = this.configService.get<string>('DIALYSE_API_URL') || 'https://chu-dialyse.onrender.com';
+    this.apiUrl = rawUrl.replace(/\/api$/, '');
   }
 
   // Créer un patient dans le système dialyse
@@ -98,6 +99,24 @@ export class DialyseService {
     }
   }
 
+  // Rechercher les demandes d'avis existantes dans le système dialyse
+  async findDemandesAvis(patientId: string, descriptionCas?: string): Promise<any[]> {
+    try {
+      const params: Record<string, any> = { patientId };
+      if (descriptionCas) {
+        params.description_cas = descriptionCas;
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.apiUrl}/demandes-avis`, { params }),
+      );
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      this.logger.warn(`Impossible de vérifier les demandes d'avis existantes Dialyse: ${error.message}`);
+      return [];
+    }
+  }
+
   // Envoyer une notification au système dialyse
   async sendNotification(notificationData: any): Promise<any> {
     try {
@@ -109,53 +128,6 @@ export class DialyseService {
       return response.data;
     } catch (error) {
       this.logger.error(`Erreur lors de l'envoi de la notification au système dialyse: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // Récupérer tous les rendez-vous
-  async getRendezVous(): Promise<any[]> {
-    try {
-      this.logger.log(`Récupération de tous les rendez-vous`);
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.apiUrl}/rendezvous`),
-      );
-      return Array.isArray(response.data) ? response.data : [];
-    } catch (error) {
-      this.logger.error(`Erreur lors de la récupération des rendez-vous: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // Récupérer les rendez-vous par date
-  async getRendezVousByDate(date: string): Promise<any[]> {
-    try {
-      this.logger.log(`Récupération des rendez-vous pour la date: ${date}`);
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.apiUrl}/rendezvous`),
-      );
-      const allRendezVous = Array.isArray(response.data) ? response.data : [];
-      return allRendezVous.filter((rdv: any) => {
-        const rdvDate = new Date(rdv.date_heure).toISOString().split('T')[0];
-        return rdvDate === date;
-      });
-    } catch (error) {
-      this.logger.error(`Erreur lors de la récupération des rendez-vous par date: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // Créer un rendez-vous
-  async createRendezVous(rendezVousData: any): Promise<any> {
-    try {
-      this.logger.log(`Création d'un rendez-vous dans le système dialyse`);
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.apiUrl}/rendezvous/creer`, rendezVousData),
-      );
-      this.logger.log(`Rendez-vous créé avec succès dans le système dialyse`);
-      return response.data;
-    } catch (error) {
-      this.logger.error(`Erreur lors de la création du rendez-vous: ${error.message}`);
       throw error;
     }
   }
